@@ -1,0 +1,11 @@
+Options +Indexes +Includes +SymLinksIfOwnerMatch
+DirectoryIndex index.html index.shtml index.htm index.htx index.cgi
+
+AddType	   text/html     .html
+AddHandler server-parsed .html
+
+<files *.cgi>
+Options +ExecCGI
+SetHandler cgi-script
+</files>
+

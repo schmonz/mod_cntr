@@ -1,0 +1,47 @@
+#
+# $Id: mod_cntr.module,v 2.2 1998/10/08 17:58:19 dankogai Exp dankogai $
+#
+Name: cntr_module
+ConfigStart
+    DB_VERSION=''
+    DB_LIB=''
+
+    echo "      - Checking GDBM ..."
+    if ./helpers/TestCompile lib gdbm gdbm_open; then
+	DBM_LIB="-lgdbm"
+	HAVE_WHAT='-DHAVE_GDBM'
+    else
+	echo "      - Checking Berkeley DB 2.x ..."
+	if ./helpers/TestCompile func db_open; then
+	    DB_VERSION='Berkeley-DB/2.x'
+	else
+	    echo "      --- with -ldb ..."
+	    if ./helpers/TestCompile lib db db_open; then
+		DB_VERSION='Berkeley-DB/2.x'
+		DBM_LIB='-ldb'
+	    else 
+		echo "      - Checking Berkeley DB 1.x ..."
+		if ./helpers/TestCompile func dbopen; then
+		    DB_VERSION='Berkeley-DB/1.x'
+		else
+		echo "      --- with -ldb ..."
+		    if ./helpers/TestCompile lib db dbopen; then
+			DB_VERSION='Berkeley-DB/1.x'
+			DBM_LIB='-ldb'
+		    fi
+		fi
+	    fi
+	fi
+	if [ ".$DB_VERSION" != . ]; then
+	    HAVE_WHAT='-DHAVE_DB'
+	else
+	    echo "      - Cheking an ordinary DBM as last resort..."
+	    . ./helpers/find-dbm-lib	     	
+	fi
+    fi
+    # math library required.  Damn.
+    LIBS="$LIBS $DBM_LIB -lm"
+    CFLAGS="$CFLAGS  $HAVE_WHAT"
+    echo "      mod_cntr: CFLAGS = $CFLAGS"
+    echo "      mod_cntr: LIBS   = $LIBS"
+ConfigEnd
