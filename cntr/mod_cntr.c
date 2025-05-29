@@ -56,20 +56,7 @@
  *
  * Track all incoming requests for each URL.  Maintains a database
  * containing each URL accessed, count of times accessed, and last
- * time counter has been reset.  If the URL is a directory, then
- * the file that it is redirected to is counted.
- *
- * The values for count of times accessed, and last time counter was
- * reset are made available to the to the document via variables called
- * URL_COUNT and URL_COUNT_RESET, respectively.
- * Another variable URL_COUNT_DB is set to the database file used.
- *
- * Config file directives:
- *
- *     CounterAutoAdd        On or Off  Automatically add missing URL's
- *     CounterFile           path to ascii or dbm file (relative to logs/),
- *                           there is no default
- *     CounterTimeFmt        Time format for URL_CONTER_RESET
+ * time counter has been reset.
  *
  * Dan Kogai (dankogai@dan.co.jp)
  * Originally by Brian Kolaci (bk@galaxy.net)
@@ -79,13 +66,16 @@
  *
  */
 
-
-#include "httpd.h"
-#include "http_config.h"
-#include "http_core.h"
-#include "http_log.h"
-#include "http_protocol.h"
-#include "http_request.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <ctype.h>
+#include <dirent.h>
 
 #ifdef OS2
 #include <systems.h>
@@ -106,15 +96,6 @@
 
 ////#define DEBUG_CGI
 
-module cntr_module;
-
-char *cntr_uri_to_path(request_rec *r, const char *full_uri)
-{
-    uri_components parsed;
-    ap_parse_uri_components(r->pool, full_uri, &parsed);
-    return parsed.path;
-}
-
 /*
  *  Data structions
  */
@@ -127,26 +108,17 @@ typedef struct {
 }      cntr_results;
 
 typedef struct {
-    int cntr_default;
     int cntr_auto_add;
     char *cntr_file;
     char *cntr_timefmt;
     char *cntr_facedir;
 }      cntr_config_rec;
 
-
 #define DEFAULT_FACE	"default"
-
-#define	DEF_CNTR_AA	 1
-#define	DEF_CNTR_FILE	 2
-#define	DEF_CNTR_TIMEFMT 4
-#define	DEF_CNTR_FACEDIR 8
-#define	DEF_ALL          ~0
 
 /*
  *  Set defaults
  */
-
 #define DEFAULT_CNTR_FILE	""
 #define DEFAULT_CNTR_TIMEFMT	"%A, %d-%b-%Y %H:%M:%S %Z"
 #define DEFAULT_CNTR_FACEDIR    "/usr/local/apache/share/digits"
@@ -154,185 +126,55 @@ typedef struct {
 /*
  * Create config data structure
  */
-void *create_cntr_config_rec(pool *p, char *d)
+cntr_config_rec *global_config = NULL;
+
+char *ap_pstrdup(const char *s)
 {
-    /*
-     * Set the defaults
-     */
-    cntr_config_rec *rec =
-    (cntr_config_rec *) ap_pcalloc(p, sizeof(cntr_config_rec));
-    rec->cntr_auto_add = 0;
-    rec->cntr_file = DEFAULT_CNTR_FILE ? ap_pstrdup(p, DEFAULT_CNTR_FILE) : NULL;
-    rec->cntr_timefmt = ap_pstrdup(p, DEFAULT_CNTR_TIMEFMT);
-    rec->cntr_facedir = ap_pstrdup(p, DEFAULT_CNTR_FACEDIR);
-    rec->cntr_default = DEF_ALL;
-    return (rec);
+    if (!s) return NULL;
+    return strdup(s);
 }
-
-void *merge_config_rec(pool *p, void *parent, void *sub)
-{
-    cntr_config_rec *par = (cntr_config_rec *) parent;
-    cntr_config_rec *chld = (cntr_config_rec *) sub;
-    cntr_config_rec *mrg = (cntr_config_rec *) ap_palloc(p, sizeof(*mrg));
-
-    if (chld->cntr_default & DEF_CNTR_AA)
-	mrg->cntr_auto_add = par->cntr_auto_add;
-    else
-	mrg->cntr_auto_add = chld->cntr_auto_add;
-
-    if (chld->cntr_default & DEF_CNTR_FILE)
-	mrg->cntr_file = par->cntr_file;
-    else
-	mrg->cntr_file = chld->cntr_file;
-
-    if (chld->cntr_default & DEF_CNTR_TIMEFMT)
-	mrg->cntr_timefmt = par->cntr_timefmt;
-    else
-	mrg->cntr_timefmt = chld->cntr_timefmt;
-
-    if (chld->cntr_default & DEF_CNTR_FACEDIR)
-	mrg->cntr_facedir = par->cntr_facedir;
-    else
-	mrg->cntr_facedir = chld->cntr_facedir;
-
-    mrg->cntr_default = 0;
-    return (mrg);
-}
-
-const char *set_cntr_autoadd(cmd_parms *cmd, void *ct, int arg)
-{
-    cntr_config_rec *conf = (cntr_config_rec *) ct;
-    conf->cntr_auto_add = arg;
-    conf->cntr_default &= ~DEF_CNTR_AA;
-    return (NULL);
-}
-
-const char *set_cntr_file(cmd_parms *cmd, void *ct, char *arg)
-{
-    void *ret = NULL;
-    cntr_config_rec *conf = (cntr_config_rec *) ct;
-
-    if (strcmp(arg, "/dev/null"))
-	conf->cntr_file = ap_server_root_relative(cmd->pool, arg);
-    else
-	conf->cntr_file = "";
-    conf->cntr_default &= ~DEF_CNTR_FILE;
-
-    return (ret);
-}
-
-const char *set_cntr_timefmt(cmd_parms *cmd, void *ct, char *arg)
-{
-    void *ret = NULL;
-    cntr_config_rec *conf = (cntr_config_rec *) ct;
-
-    conf->cntr_timefmt = arg;
-    conf->cntr_default &= ~DEF_CNTR_TIMEFMT;
-
-    return (ret);
-}
-
-const char *set_cntr_facedir(cmd_parms *cmd, void *ct, char *arg)
-{
-    void *ret = NULL;
-    cntr_config_rec *conf = (cntr_config_rec *) ct;
-
-    conf->cntr_facedir = arg;
-    conf->cntr_default &= ~DEF_CNTR_FACEDIR;
-
-    return (ret);
-}
-
-/* to snatch module config from mod_dir.c */
-
-typedef struct dir_config_struct {
-    array_header *index_names;
-}                 dir_config_rec;
-
-char *set_url_count_dindex(request_rec *r)
-{
-    char buf[MAXPATHLEN] = "";
-    dir_config_rec *dir =
-    (dir_config_rec *) ap_get_module_config(r->per_dir_config,
-					 ap_find_linked_module("mod_dir.c"));
-    if (dir && dir->index_names) {
-	char **names_ptr = (char **) dir->index_names->elts;
-	int num_names = dir->index_names->nelts;
-	for (; num_names; ++names_ptr, --num_names) {
-	    if (!*buf) {
-		strcpy(buf, *names_ptr);
-	    }
-	    else {
-		strcat(buf, " ");
-		strcat(buf, *names_ptr);
-	    }
-	}
-    }
-    return ap_pstrdup(r->pool, buf);
-}
-
-command_rec cntr_cmds[] = {
-    {"CounterAutoAdd", set_cntr_autoadd, NULL, OR_ALL, FLAG,
-    "When set, automatically add new URL to counter file"},
-    {"CounterFile", set_cntr_file, NULL, OR_ALL, TAKE1,
-    "Name of counter file or database"},
-    {"CounterTimeFmt", set_cntr_timefmt, NULL, OR_ALL, TAKE1,
-    "Time Format for URL_COUNT_RESET"},
-    {"CounterFaceDir", set_cntr_facedir, NULL, OR_ALL, TAKE1,
-    "Face Directory"},
-    {NULL}
-};
 
 /*
- * Handle special cases of counter-filename.
- * Case 1: %v in the filename will be expanded to the server-name.
- * by Sander Steffann
+ * Initialize configuration from environment variables
  */
-
-char *cntr_construct_filename(request_rec *r, char *p, char *t, int l)
+cntr_config_rec *init_config()
 {
-    int i = 0;
-    int j = 0;
-    int k;
+    cntr_config_rec *conf = calloc(1, sizeof(cntr_config_rec));
+    if (!conf) return NULL;
 
-    if (p == NULL)
-	return NULL;
+    char *env_val;
 
-    bzero(t, l);
-    while ((p[i] != 0) && (j < l)) {
-	if ((p[i] == '%') && (p[i + 1] == 'v')) {
-	    i += 2;		/* Skip %v */
+    env_val = getenv("CNTR_AUTO_ADD");
+    conf->cntr_auto_add = (env_val && !strcasecmp(env_val, "on")) ? 1 : 0;
 
-	    k = 0;
-	    while ((r->server->server_hostname[k] != 0) && (j < l)) {
-		t[j++] = r->server->server_hostname[k++];
-	    }
-	}
-	else {
-	    /* Copy character and continue with next */
-	    t[j++] = p[i++];
-	}
-    }
+    env_val = getenv("CNTR_FILE");
+    conf->cntr_file = env_val ? ap_pstrdup(env_val) : ap_pstrdup(DEFAULT_CNTR_FILE);
 
-    if (j < l) {
-	t[j] = 0;
-	return t;
-    }
-    else {
-        //originally t[0] == 0;
-        t[0] = 0;
-	return NULL;
+    env_val = getenv("CNTR_TIMEFMT");
+    conf->cntr_timefmt = env_val ? ap_pstrdup(env_val) : ap_pstrdup(DEFAULT_CNTR_TIMEFMT);
+
+    env_val = getenv("CNTR_FACEDIR");
+    conf->cntr_facedir = env_val ? ap_pstrdup(env_val) : ap_pstrdup(DEFAULT_CNTR_FACEDIR);
+
+    return conf;
+}
+
+void cleanup_config(cntr_config_rec *conf)
+{
+    if (conf) {
+        free(conf->cntr_file);
+        free(conf->cntr_timefmt);
+        free(conf->cntr_facedir);
+        free(conf);
     }
 }
 
 /*
  * open dbm with file lock.
  */
-DBM_FILE do_dbm_open(request_rec *r, char *cntr_file, char *err)
+DBM_FILE do_dbm_open(char *pcntr_file, char *err)
 {
     DBM_FILE dbm;
-    char pcntr_file[MAXPATHLEN];
-    cntr_construct_filename(r, cntr_file, pcntr_file, sizeof(pcntr_file));
 #ifdef HAVE_DB
     if ((dbm = dbm_open(pcntr_file, O_RDWR | O_CREAT | O_EXLOCK, 0666))
 	== NULL) {
@@ -375,7 +217,6 @@ void do_dbm_close(DBM_FILE dbm)
 #endif				/* HAVE_DB || HAVE_GDBM */
 }
 
-
 /*
  * Bare-text counter is no longer suppported.
  * -- dankogai
@@ -384,7 +225,7 @@ void do_dbm_close(DBM_FILE dbm)
  cntr_config_rec* r, char* uri )
 */
 
-char *cntr_incdbm(request_rec *r, cntr_results * results,
+char *cntr_incdbm(cntr_results * results,
 		       cntr_config_rec * c, char *uri)
 {
     DBM_FILE dbm;
@@ -397,8 +238,8 @@ char *cntr_incdbm(request_rec *r, cntr_results * results,
     q.dptr = uri;
     q.dsize = strlen(q.dptr);
 
-    if ((dbm = do_dbm_open(r, c->cntr_file, err)) == NULL) {
-	return ap_pstrcat(r->pool, err, NULL);
+    if ((dbm = do_dbm_open(c->cntr_file, err)) == NULL) {
+	return ap_pstrdup(err);
     }
 
     d = dbm_fetch(dbm, q);
@@ -427,15 +268,14 @@ char *cntr_incdbm(request_rec *r, cntr_results * results,
     }
 
     do_dbm_close(dbm);
-
-    return (OK);
+    return NULL;
 }
 
-char *cntr_inc(request_rec *r, cntr_results * results,
+char *cntr_inc(cntr_results * results,
 	            cntr_config_rec * c, char *uri)
 {
     /* Normalize the URI stripping out double "//" */
-    char *puri = ap_pstrdup(r->pool, uri);
+    char *puri = ap_pstrdup(uri);
     char *ptr = puri;
     while (ptr && *ptr) {
 	if (*ptr == '/' && *(ptr + 1) == '/') {
@@ -448,7 +288,9 @@ char *cntr_inc(request_rec *r, cntr_results * results,
 	}
     }
 
-    return cntr_incdbm(r, results, c, puri);
+    char *result = cntr_incdbm(results, c, puri);
+    free(puri);
+    return result;
 }
 
 /*******************************************************************\
@@ -456,7 +298,7 @@ char *cntr_inc(request_rec *r, cntr_results * results,
  * Conceived on VII June MCMXCIX ( or should that be MIM ? )       *
  *                                                                 *
  *******************************************************************/
-const char *roman( unsigned n, pool *p )
+const char *roman( unsigned n )
 {
    static char* rom[3][10] = {
       {"","C","CC","CCC","CD","D","DC","DCC","DCCC","CM"},
@@ -467,7 +309,9 @@ const char *roman( unsigned n, pool *p )
    int mille = n / 1000;
    int rest  = n % 1000;
 
-   char *q, *ret = ap_pcalloc( p, mille + 16 );
+   static char ret[1024];
+   char *q;
+
    for( q=ret; mille--; )
    {
       *q++ = 'M';
@@ -484,90 +328,25 @@ const char *roman( unsigned n, pool *p )
    return ret;
 }
 
-int cntr_update(request_rec *r)
-{
-    char *err;
-    char buf[MAXPATHLEN];
-    ////char *timefmt;
-    ////char *facedir;
-
-    int ret = OK;
-    cntr_config_rec *conf;
-    cntr_results *res;
-
-    /*
-     * Get actual file, if locally redirected
-     */
-    while (r->next)
-	r = r->next;
-    /*
-     * Skip if missing URI or this is an included request
-     */
-    if (!r->uri || !strcmp(r->protocol, "INCLUDED"))
-	return (DECLINED);
-    if (!S_ISREG(r->finfo.st_mode))
-	return (DECLINED);
-
-    /*
-     * get configuration
-     */
-    conf = ap_get_module_config(r->per_dir_config, &cntr_module);
-    res = (cntr_results *) ap_pcalloc(r->pool, sizeof(cntr_results));
-    /*
-     * skip if there is no counter file;
-     */
-    if (!*conf->cntr_file) {
-	return (DECLINED);
-    }
-    else {
-	if (err = cntr_inc(r, res, conf, r->uri)) {
-	    ap_log_error_old(err, r->server);
-	}
-    }
-
-    /*
-     * set environment variables
-     */
-
-    sprintf(buf, "%lu", res->count);
-    ap_table_set(r->subprocess_env, "URL_COUNT", buf);
-    /*
-     * Now for the romans...
-     */
-    if( res->count < 50000 )
-       ap_table_set(r->subprocess_env, "VRL_COVNT", roman(res->count, r->pool));
-    else
-       ap_table_set(r->subprocess_env, "VRL_COVNT", "Ouch ! Romans can't count <B>THAT</B> high");
-    
-    ap_table_set(r->subprocess_env, "URL_COUNT_RESET",
-	      ap_ht_time(r->pool, res->date, conf->cntr_timefmt, 0));
-    ap_table_set(r->subprocess_env, "URL_COUNT_DB",
-	      cntr_construct_filename(r, conf->cntr_file, buf, sizeof(buf)));
-    ap_table_set(r->subprocess_env, "URL_COUNT_FACEDIR", conf->cntr_facedir);
-    ap_table_set(r->subprocess_env, "URL_COUNT_TIMEFMT", conf->cntr_timefmt);
-    ap_table_set(r->subprocess_env, "URL_COUNT_DINDEX", set_url_count_dindex(r));
-    return ret;
-}
-
 /*
  *---- handler part---
  */
 
-int cntr_parse_query(request_rec *r,
+int cntr_parse_query(
 	     char *query, char **face, int *ndigit, int *trans, int *fcount)
 {
     char *qbuf, *q;
 
     if (!query || !*query) {
-	return OK;
+	return 0;
     }
 
-    qbuf = ap_pstrdup(r->pool, query);
+    qbuf = ap_pstrdup(query);
     q = strtok(qbuf, "&");
 
     do {
 	if (strncasecmp(q, "face=", 5) == 0) {
-	    *face = ap_pstrdup(r->pool, q + 5);
+	    *face = ap_pstrdup(q + 5);
 
          /******************************************
           *                                        *
@@ -575,22 +354,28 @@ int cntr_parse_query(request_rec *r,
           *                                        *
           ******************************************/
          if( !strcasecmp(*face, "random") ){
-            cntr_config_rec *c =
-               (cntr_config_rec *) ap_get_module_config(r->per_dir_config, &cntr_module);
-            DIR *facedir = opendir( c->cntr_facedir );
+            DIR *facedir = opendir( global_config->cntr_facedir );
             if( facedir ){
                struct dirent *direntry;
-               int i;
+               char *faces[256];
+               int face_count = 0;
                
                while( direntry = readdir( facedir ) ){
                   if( *(direntry->d_name) == '.' )
                      continue;
-                  ap_table_add( r->notes, direntry->d_name, "d" );
+                  if(face_count < 256) {
+                      faces[face_count++] = ap_pstrdup(direntry->d_name);
+                  }
                } /* wend */
+               closedir(facedir);
 
-               if( (i=((array_header*)r->notes)->nelts) ){
-                  table_entry *t = (table_entry*)((array_header*)r->notes)->elts;
-                  *face = ap_pstrdup( r->pool, t[rand() % i].key );
+               if(face_count > 0) {
+                  free(*face);
+                  *face = ap_pstrdup(faces[rand() % face_count]);
+
+                  for(int i = 0; i < face_count; i++) {
+                      free(faces[i]);
+                  }
                }
             }
             /* else (!facedir) nothing */
@@ -606,7 +391,8 @@ int cntr_parse_query(request_rec *r,
 	    *fcount = atoi(q + 7);
 	}
     } while (q = strtok(NULL, "&"));
-    return OK;
+    free(qbuf);
+    return 0;
 }
 
 /*
@@ -615,27 +401,26 @@ int cntr_parse_query(request_rec *r,
 
 #include "gdmini.h"
 
-gdImagePtr cntr_read_digit(request_rec *r, int digit)
+gdImagePtr cntr_read_digit(int digit)
 {
     char file[256];
     gdImagePtr im = NULL;
     FILE *fp;
 
     sprintf(file, "%d.gif", digit);
-    if (fp = ap_pfopen(r->pool, file, "r")) {
+    if (fp = fopen(file, "r")) {
 	im = gdImageCreateFromGif(fp);
-	ap_pfclose(r->pool, fp);
+	fclose(fp);
     }
     else {
-	ap_log_error_old(ap_psprintf(r->pool, "%d.gif:%s\n", digit, strerror(errno)),
-		  r->server);
+	fprintf(stderr, "%d.gif: %s\n", digit, strerror(errno));
     }
     return im;
 }
 
 #define MAXNDIGIT 12
 
-int cntr_draw_digit(request_rec *r, cntr_config_rec * c, int count)
+int cntr_draw_digit(cntr_config_rec * c, int count)
 {
     int i;
     ////int resize = 0;
@@ -650,8 +435,10 @@ int cntr_draw_digit(request_rec *r, cntr_config_rec * c, int count)
     int trans = 0;
     int fcount = 0;
 
-    if (r->args) {
-	cntr_parse_query(r, r->args, &face, &ndigit, &trans, &fcount);
+    char *query_string = getenv("QUERY_STRING");
+
+    if (query_string) {
+	cntr_parse_query(query_string, &face, &ndigit, &trans, &fcount);
     }
 
     if (ndigit > 0) {
@@ -669,26 +456,23 @@ int cntr_draw_digit(request_rec *r, cntr_config_rec * c, int count)
 
     /* Go to digits directory */
     if (chdir(c->cntr_facedir) != 0) {
-	ap_log_error_old(ap_psprintf(r->pool, "%s:%s\n", c->cntr_facedir,
-			   strerror(errno)), r->server);
+	fprintf(stderr, "%s:%s\n", c->cntr_facedir,
+			   strerror(errno));
 	goto cleanup;
     }
     if (face) {
 	if (chdir(face) != 0) {
-	    ap_log_error_old(ap_psprintf(r->pool, "%s:%s. Trying %s\n",
-			    c->cntr_facedir, strerror(errno), DEFAULT_FACE),
-		      r->server);
+	    fprintf(stderr, "%s:%s. Trying %s\n",
+			    c->cntr_facedir, strerror(errno), DEFAULT_FACE);
 	    if (chdir(DEFAULT_FACE) != 0) {
-		ap_log_error_old(ap_psprintf(r->pool, "%s:%s\n", strerror(errno), DEFAULT_FACE),
-			  r->server);
+		fprintf(stderr, "%s:%s\n", strerror(errno), DEFAULT_FACE);
 		goto cleanup;
 	    }
 	}
     }
     else {
 	if (chdir(DEFAULT_FACE) != 0) {
-	    ap_log_error_old(ap_psprintf(r->pool, "%s:%s\n", strerror(errno), DEFAULT_FACE),
-		      r->server);
+	    fprintf(stderr, "%s:%s\n", strerror(errno), DEFAULT_FACE);
 	    goto cleanup;
 	}
     }
@@ -697,7 +481,7 @@ int cntr_draw_digit(request_rec *r, cntr_config_rec * c, int count)
 	if (isdigit(*dp)) {
 	    i = *dp - '0';
 	    if (imdigit[i] == NULL)
-		if ((imdigit[i] = cntr_read_digit(r, i)) == NULL) {
+		if ((imdigit[i] = cntr_read_digit(i)) == NULL) {
 		    goto cleanup;
 		}
 	    if (gdImageSY(imdigit[i]) > height)
@@ -732,11 +516,11 @@ int cntr_draw_digit(request_rec *r, cntr_config_rec * c, int count)
 
     imdyna = gdImageGifData(imgd);
 
-    r->content_type = "image/gif";
-    ap_table_set(r->headers_out, "Pragma", "no-cache");
-    ap_table_set(r->headers_out, "Expires", "Thursday, 01-Jan-1970 00:00:00");
-    ap_send_http_header(r);
-    ap_rwrite(imdyna->data, imdyna->logicalSize, r);
+    printf("Content-Type: image/gif\r\n");
+    printf("Pragma: no-cache\r\n");
+    printf("Expires: Thursday, 01-Jan-1970 00:00:00\r\n");
+    printf("\r\n");
+    fwrite(imdyna->data, imdyna->logicalSize, 1, stdout);
 
     freeDynamic(imdyna);
     gdImageDestroy(imgd);
@@ -748,29 +532,17 @@ cleanup:
 	    gdImageDestroy(imdigit[i]);
 	}
     }
-    return OK;
+
+    if (face) free(face);
+    return 0;
 }
 
-void dump_table(request_rec *r, table *t)
-{
-    array_header *ah = (array_header *) t;
-    table_entry *te = (table_entry *) ah->elts;
-    int i;
-    ap_rprintf(r, "<pre>\n");
-    for (i = 0; i < ah->nelts; i++) {
-	ap_rprintf(r, "%s = %s\n", te[i].key, te[i].val);
-    }
-    ap_rprintf(r, "</pre>\n");
-}
-
-int cntr_lookup(request_rec *r, cntr_config_rec * c,
+int cntr_lookup(cntr_config_rec * c,
 		    const char *uri, cntr_results * counter)
 {
     int result = 0;
     DBM_FILE dbm;
     datum d, q;
-
-    char pcntr_file[MAXPATHLEN];
 
 #ifdef DEBUG_CGI
 #ifdef OS2
@@ -785,8 +557,6 @@ int cntr_lookup(request_rec *r, cntr_config_rec * c,
     fprintf( dbg, "cntr_lookup - URI: %s\n", uri );
 #endif
 
-    cntr_construct_filename(r, c->cntr_file, pcntr_file, sizeof(pcntr_file));
-
     q.dptr = (char *) uri;
     q.dsize = strlen(q.dptr);
 
@@ -794,16 +564,16 @@ int cntr_lookup(request_rec *r, cntr_config_rec * c,
      * No locking is necessary for read_only. so no do_dbm_open is done.
      */
 #ifdef HAVE_GDBM
-    if ((dbm = gdbm_open(pcntr_file, 512, GDBM_READER, 0444, 0)) == NULL) {
-	ap_log_error_old(ap_psprintf(r->pool, "Failed to open %s", pcntr_file), r->server);
+    if ((dbm = gdbm_open(c->cntr_file, 512, GDBM_READER, 0444, 0)) == NULL) {
+	fprintf(stderr, "Failed to open %s\n", c->cntr_file);
     #ifdef DEBUG_CGI
         fclose( dbg );
     #endif
 	return 0;
     }
 #else
-    if ((dbm = dbm_open(pcntr_file, O_RDONLY, 0444)) == NULL) {
-	ap_log_error_old(ap_psprintf(r->pool, "Failed to open %s", pcntr_file), r->server);
+    if ((dbm = dbm_open(c->cntr_file, O_RDONLY, 0444)) == NULL) {
+	fprintf(stderr, "Failed to open %s\n", c->cntr_file);
     #ifdef DEBUG_CGI
         fclose( dbg );
     #endif
@@ -816,44 +586,15 @@ int cntr_lookup(request_rec *r, cntr_config_rec * c,
 	memcpy(counter, d.dptr, sizeof(cntr_results));
 	result = counter->count;
     }
-    else {
-	if (uri[strlen(uri) - 1] == '/') {	/* if directory */
-	    char new_uri[MAXPATHLEN];
-	    request_rec *rr = ap_sub_req_lookup_uri(uri, r);
-
-	    dir_config_rec *dir =
-	    (dir_config_rec *) ap_get_module_config(rr->per_dir_config,
-					   ap_find_linked_module("mod_dir.c"));
-	    ap_destroy_sub_req(rr);
-
-	    if (dir && dir->index_names) {
-		char **names_ptr = (char **) dir->index_names->elts;
-		int num_names = dir->index_names->nelts;
-		for (; num_names; ++names_ptr, --num_names) {
-		    sprintf(new_uri, "%s%s", uri, *names_ptr);
-		    q.dptr = new_uri;
-		    q.dsize = strlen(q.dptr);
-		    d = dbm_fetch(dbm, q);
-		    if (d.dptr) {
-			memcpy(counter, d.dptr, sizeof(cntr_results));
-			result = counter->count;
-		    }
-		}
-	    }
-	}
-	else {
-	    ap_log_error_old("No uri found\n", r->server);
-	}
-    }
 
 #ifdef DEBUG_CGI
     fclose( dbg );
 #endif
     dbm_close(dbm);
-
     return result;
 }
 
+/*
 int cntr_handler(request_rec *r)
 {
     cntr_config_rec *c =
@@ -883,9 +624,9 @@ int cntr_handler(request_rec *r)
 	    cntr_lookup(r, c, cntr_uri_to_path(r, referer), &counter);
 	}
 
-        /***************************************
+        /////////////////////////////////////////
          *   For the benefit of face=random    *
-         ***************************************/
+         ////////////////////////////////////////
         srand( r->request_time );
         
 	return cntr_draw_digit(r, c, counter.count);
@@ -894,16 +635,14 @@ int cntr_handler(request_rec *r)
 	return DECLINED;
     }
 }
+*/
 
-int cntr_debug_handler(request_rec *r)
+int cntr_debug_handler(cntr_config_rec *c)
 {
-    cntr_config_rec *c =
-    (cntr_config_rec *) ap_get_module_config(r->per_dir_config, &cntr_module);
-
-    char *uri = r->uri;
-    const char *referer = ap_table_get(r->headers_in, "Referer");
-    char *path_info = r->path_info;
-    char *args = r->args;
+    char *path_info = getenv("PATH_INFO");
+    char *referer = getenv("HTTP_REFERER");
+    char *query_string = getenv("QUERY_STRING");
+    char *request_uri = getenv("REQUEST_URI");
     char *face = NULL;
     int ndigit = 0;
     int trans = 0;
@@ -913,83 +652,88 @@ int cntr_debug_handler(request_rec *r)
     counter.count = 0;
     counter.date = 0;
 
-    r->content_type = "text/html";
-    ap_send_http_header(r);
+    printf("Content-Type: text/html\r\n\r\n");
 
-    if (!r->header_only) {
-	ap_rprintf(r, "<h2>Configuration:</h2>\n");
-	ap_rprintf(r, "<pre>\n");
-	ap_rprintf(r, "cntr_auto_add = %d\n", c->cntr_auto_add);
-	ap_rprintf(r, "cntr_file = %s\n", c->cntr_file);
-	ap_rprintf(r, "cntr_timefmt = %s\n", c->cntr_timefmt);
-	ap_rprintf(r, "cntr_facedir = %s\n", c->cntr_facedir);
-	ap_rprintf(r, "</pre>\n");
+    printf("<h2>Configuration:</h2>\n");
+    printf("<pre>\n");
+    printf("cntr_auto_add = %d\n", c->cntr_auto_add);
+    printf("cntr_file = %s\n", c->cntr_file);
+    printf("cntr_timefmt = %s\n", c->cntr_timefmt);
+    printf("cntr_facedir = %s\n", c->cntr_facedir);
+    printf("</pre>\n");
 
-	ap_rprintf(r, "<h2>Request:</h2>\n");
-	ap_rprintf(r, "<pre>\n");
-	ap_rprintf(r, "uri = %s\n", uri);
-	ap_rprintf(r, "referer = %s\n", referer);
-	ap_rprintf(r, "path_info = %s\n", path_info);
-	ap_rprintf(r, "args = %s\n", r->args);
-	ap_rprintf(r, "</pre>\n");
+    printf("<h2>Request:</h2>\n");
+    printf("<pre>\n");
+    printf("request_uri = %s\n", request_uri ? request_uri : "(null)");
+    printf("referer = %s\n", referer ? referer : "(null)");
+    printf("path_info = %s\n", path_info ? path_info : "(null)");
+    printf("query_string = %s\n", query_string ? query_string : "(null)");
+    printf("</pre>\n");
 
-	ap_rprintf(r, "<h2>Counter:</h2>\n");
-	ap_rprintf(r, "<pre>\n");
+    printf("<h2>Counter:</h2>\n");
+    printf("<pre>\n");
 
-	if (strlen(path_info)) {
-	    ap_rprintf(r, "<b>count(path_info)</b>\n");
-	    cntr_lookup(r, c, path_info, &counter);
-	    ap_rprintf(r, " count = %ld\n date = %ld\n",
-		    counter.count, counter.date);
-	}
-	if (referer) {
-	    ap_rprintf(r, "<b>count(referer)</b>\n");
-	    cntr_lookup(r, c, cntr_uri_to_path(r, referer), &counter);
-	    ap_rprintf(r, " count = %ld\n date = %ld\n",
-		    counter.count, counter.date);
-	}
-	ap_rprintf(r, "</pre>\n");
-
-	ap_rprintf(r, "<h2>Queries:</h2>\n");
-	ap_rprintf(r, "<pre>\n");
-	if (args) {
-	    cntr_parse_query(r, args, &face, &ndigit, &trans, &fcount);
-	    ap_rprintf(r, "face   = %s\n", face);
-	    ap_rprintf(r, "ndigit = %d\n", ndigit);
-	    ap_rprintf(r, "trans  = %d\n", trans);
-	    ap_rprintf(r, "trans  = %d\n", fcount);
-	}
-	ap_rprintf(r, "</pre>\n");
-
-	ap_rprintf(r, "<h2>headers_in</h2>\n");
-	dump_table(r, r->headers_in);
+    if (path_info && strlen(path_info)) {
+	printf("<b>count(path_info)</b>\n");
+	cntr_lookup(c, path_info, &counter);
+	printf(" count = %ld\n date = %ld\n", counter.count, counter.date);
     }
-    return OK;
+
+    printf("</pre>\n");
+
+    printf("<h2>Queries:</h2>\n");
+    printf("<pre>\n");
+    if (query_string) {
+	cntr_parse_query(query_string, &face, &ndigit, &trans, &fcount);
+	printf("face   = %s\n", face ? face : "(null)");
+	printf("ndigit = %d\n", ndigit);
+	printf("trans  = %d\n", trans);
+	printf("fcount = %d\n", fcount);
+    }
+    printf("</pre>\n");
+
+    if (face) free(face);
+    return 0;
 }
 
-handler_rec cntr_handlers[] =
+int main()
 {
-    {"server-cntr", cntr_handler},
-    {"server-cntr-debug", cntr_debug_handler},
-    {NULL}
-};
+    global_config = init_config();
+    if (!global_config) {
+        fprintf(stderr, "Failed to initialize configuration\n");
+        return 1;
+    }
 
+    char *request_method = getenv("REQUEST_METHOD");
+    char *path_info = getenv("PATH_INFO");
 
-module cntr_module = {
-    STANDARD_MODULE_STUFF,
-    NULL,			/* initializer */
-    create_cntr_config_rec,	/* dir config creater */
-    merge_config_rec,		/* dir merge --- default is to override */
-    NULL,			/* server config */
-    NULL,			/* merge server config */
-    cntr_cmds,			/* command table */
-    cntr_handlers,		/* handlers */
-    NULL,			/* filename translation */
-    NULL,			/* ap_check_user_id */
-    NULL,			/* check auth */
-    NULL,			/* check access */
-    NULL,			/* type_checker */
-    cntr_update,		/* fixups */
-    NULL			/* logger */
-};
+    /* Seed random number generator */
+    srand(time(NULL));
 
+    /* Check if this is a debug request */
+    if (path_info && strstr(path_info, "debug")) {
+        cntr_debug_handler(global_config);
+    }
+    else {
+        /* Handle counter display */
+        cntr_results counter;
+        counter.count = 0;
+        counter.date = 0;
+
+        if (!global_config->cntr_file || !*global_config->cntr_file) {
+            printf("Content-Type: text/plain\r\n\r\n");
+            printf("Error: No counter file configured\n");
+            cleanup_config(global_config);
+            return 1;
+        }
+
+        if (path_info && strlen(path_info)) {
+            cntr_lookup(global_config, path_info, &counter);
+        }
+
+        cntr_draw_digit(global_config, counter.count);
+    }
+
+    cleanup_config(global_config);
+    return 0;
+}
