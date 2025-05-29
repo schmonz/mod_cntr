@@ -124,29 +124,29 @@ DBM_FILE do_dbm_open(char *pcntr_file, char *err)
     DBM_FILE dbm;
 #ifdef HAVE_DB
     if ((dbm = dbm_open(pcntr_file, O_RDWR | O_CREAT | O_EXLOCK, 0666))
-	== NULL) {
-	sprintf(err, "Failed to open counter dbmfile: %s", pcntr_file);
+            == NULL) {
+        sprintf(err, "Failed to open counter dbmfile: %s", pcntr_file);
     }
 #elif HAVE_GDBM
     if ((dbm = gdbm_open(pcntr_file, 512, GDBM_WRCREAT, 0666, 0)) == NULL) {
-	sprintf(err, "Failed to open counter dbmfile: %s",
-		gdbm_strerror(gdbm_errno));
+        sprintf(err, "Failed to open counter dbmfile: %s",
+                gdbm_strerror(gdbm_errno));
     }
 #else
     if ((dbm = dbm_open(pcntr_file, O_RDWR | O_CREAT, 0666)) != NULL) {
-	sprintf(err, "Failed to open counter dbmfile: %s", pcntr_file);
+        sprintf(err, "Failed to open counter dbmfile: %s", pcntr_file);
     }
-    else{
-       int lockerr;
-       struct flock lock = {F_WRLCK,0,0,0};
-    while ((lockerr = fcntl(dbm_dirfno(dbm), F_SETLKW, &lock)) < 0
-	   && errno == EINTR) {
-	continue;
-    }
-    if (lockerr) {
-	dbm_close(dbm);
-	sprintf(err, "Failed to lock DBM counter file: %s ", pcntr_file);
-    }
+    else {
+        int lockerr;
+        struct flock lock = {F_WRLCK,0,0,0};
+        while ((lockerr = fcntl(dbm_dirfno(dbm), F_SETLKW, &lock)) < 0
+                && errno == EINTR) {
+            continue;
+        }
+        if (lockerr) {
+            dbm_close(dbm);
+            sprintf(err, "Failed to lock DBM counter file: %s ", pcntr_file);
+        }
     }
 #endif
     return dbm;
@@ -173,7 +173,7 @@ void do_dbm_close(DBM_FILE dbm)
 */
 
 char *cntr_incdbm(cntr_results * results,
-		       cntr_config_rec * c, char *uri)
+                  cntr_config_rec * c, char *uri)
 {
     DBM_FILE dbm;
     char err[256];
@@ -186,7 +186,7 @@ char *cntr_incdbm(cntr_results * results,
     q.dsize = strlen(q.dptr);
 
     if ((dbm = do_dbm_open(c->cntr_file, err)) == NULL) {
-	return ap_pstrdup(err);
+        return ap_pstrdup(err);
     }
 
     d = dbm_fetch(dbm, q);
@@ -195,23 +195,23 @@ char *cntr_incdbm(cntr_results * results,
      * If found, inclement the counter
      */
     if (d.dptr) {
-	memcpy(results, d.dptr, sizeof(cntr_results));
-	results->count++;
+        memcpy(results, d.dptr, sizeof(cntr_results));
+        results->count++;
     }
     /*
      * Else create a new one;
      */
     else {
-	results->count = 1;
-	results->date = time(0L);
+        results->count = 1;
+        results->date = time(0L);
     }
     /*
      * Add or update the record
      */
     if (d.dptr || c->cntr_auto_add) {
-	d.dptr = (void *) results;
-	d.dsize = sizeof(cntr_results);
-	dbm_store(dbm, q, d, DBM_REPLACE);
+        d.dptr = (void *) results;
+        d.dsize = sizeof(cntr_results);
+        dbm_store(dbm, q, d, DBM_REPLACE);
     }
 
     do_dbm_close(dbm);
@@ -219,20 +219,20 @@ char *cntr_incdbm(cntr_results * results,
 }
 
 char *cntr_inc(cntr_results * results,
-	            cntr_config_rec * c, char *uri)
+               cntr_config_rec * c, char *uri)
 {
     /* Normalize the URI stripping out double "//" */
     char *puri = ap_pstrdup(uri);
     char *ptr = puri;
     while (ptr && *ptr) {
-	if (*ptr == '/' && *(ptr + 1) == '/') {
-	    char *q = ptr + 1;
-	    while (*q = *(q + 1))
-		q++;
-	}
-	else {
-	    ptr++;
-	}
+        if (*ptr == '/' && *(ptr + 1) == '/') {
+            char *q = ptr + 1;
+            while (*q = *(q + 1))
+                q++;
+        }
+        else {
+            ptr++;
+        }
     }
 
     char *result = cntr_incdbm(results, c, puri);
@@ -247,32 +247,32 @@ char *cntr_inc(cntr_results * results,
  *******************************************************************/
 const char *roman( unsigned n )
 {
-   static char* rom[3][10] = {
-      {"","C","CC","CCC","CD","D","DC","DCC","DCCC","CM"},
-      {"","X","XX","XXX","XL","L","LX","LXX","LXXX","XC"},
-      {"","I","II","III","IV","V","VI","VII","VIII","IX"}
-   };
-      
-   int mille = n / 1000;
-   int rest  = n % 1000;
+    static char* rom[3][10] = {
+        {"","C","CC","CCC","CD","D","DC","DCC","DCCC","CM"},
+        {"","X","XX","XXX","XL","L","LX","LXX","LXXX","XC"},
+        {"","I","II","III","IV","V","VI","VII","VIII","IX"}
+    };
 
-   static char ret[1024];
-   char *q;
+    int mille = n / 1000;
+    int rest  = n % 1000;
 
-   for( q=ret; mille--; )
-   {
-      *q++ = 'M';
-   }
-   mille = rest / 100;
-   rest %= 100;
-   strcat( ret, rom[0][mille] );
+    static char ret[1024];
+    char *q;
 
-   mille = rest / 10;
-   rest %= 10;
-   strcat( ret, rom[1][mille] );
-   strcat( ret, rom[2][rest] );
+    for( q=ret; mille--; )
+    {
+        *q++ = 'M';
+    }
+    mille = rest / 100;
+    rest %= 100;
+    strcat( ret, rom[0][mille] );
 
-   return ret;
+    mille = rest / 10;
+    rest %= 10;
+    strcat( ret, rom[1][mille] );
+    strcat( ret, rom[2][rest] );
+
+    return ret;
 }
 
 /*
@@ -280,63 +280,63 @@ const char *roman( unsigned n )
  */
 
 int cntr_parse_query(
-	     char *query, char **face, int *ndigit, int *trans, int *fcount)
+    char *query, char **face, int *ndigit, int *trans, int *fcount)
 {
     char *qbuf, *q;
 
     if (!query || !*query) {
-	return 0;
+        return 0;
     }
 
     qbuf = ap_pstrdup(query);
     q = strtok(qbuf, "&");
 
     do {
-	if (strncasecmp(q, "face=", 5) == 0) {
-	    *face = ap_pstrdup(q + 5);
+        if (strncasecmp(q, "face=", 5) == 0) {
+            *face = ap_pstrdup(q + 5);
 
-         /******************************************
-          *                                        *
-          * 'Ere we go !!!!!! (handle "random")    *
-          *                                        *
-          ******************************************/
-         if( !strcasecmp(*face, "random") ){
-            DIR *facedir = opendir( global_config->cntr_facedir );
-            if( facedir ){
-               struct dirent *direntry;
-               char *faces[256];
-               int face_count = 0;
-               
-               while( direntry = readdir( facedir ) ){
-                  if( *(direntry->d_name) == '.' )
-                     continue;
-                  if(face_count < 256) {
-                      faces[face_count++] = ap_pstrdup(direntry->d_name);
-                  }
-               } /* wend */
-               closedir(facedir);
+            /******************************************
+             *                                        *
+             * 'Ere we go !!!!!! (handle "random")    *
+             *                                        *
+             ******************************************/
+            if( !strcasecmp(*face, "random") ) {
+                DIR *facedir = opendir( global_config->cntr_facedir );
+                if( facedir ) {
+                    struct dirent *direntry;
+                    char *faces[256];
+                    int face_count = 0;
 
-               if(face_count > 0) {
-                  free(*face);
-                  *face = ap_pstrdup(faces[rand() % face_count]);
+                    while( direntry = readdir( facedir ) ) {
+                        if( *(direntry->d_name) == '.' )
+                            continue;
+                        if(face_count < 256) {
+                            faces[face_count++] = ap_pstrdup(direntry->d_name);
+                        }
+                    } /* wend */
+                    closedir(facedir);
 
-                  for(int i = 0; i < face_count; i++) {
-                      free(faces[i]);
-                  }
-               }
+                    if(face_count > 0) {
+                        free(*face);
+                        *face = ap_pstrdup(faces[rand() % face_count]);
+
+                        for(int i = 0; i < face_count; i++) {
+                            free(faces[i]);
+                        }
+                    }
+                }
+                /* else (!facedir) nothing */
             }
-            /* else (!facedir) nothing */
-         }
-	}
-	else if (strncasecmp(q, "ndigit=", 7) == 0) {
-	    *ndigit = atoi(q + 7);
-	}
-	else if (strncasecmp(q, "trans", 5) == 0) {
-	    *trans = 1;
-	}
-	else if (strncasecmp(q, "fcount=", 7) == 0) {
-	    *fcount = atoi(q + 7);
-	}
+        }
+        else if (strncasecmp(q, "ndigit=", 7) == 0) {
+            *ndigit = atoi(q + 7);
+        }
+        else if (strncasecmp(q, "trans", 5) == 0) {
+            *trans = 1;
+        }
+        else if (strncasecmp(q, "fcount=", 7) == 0) {
+            *fcount = atoi(q + 7);
+        }
     } while (q = strtok(NULL, "&"));
     free(qbuf);
     return 0;
@@ -356,11 +356,11 @@ gdImagePtr cntr_read_digit(int digit)
 
     sprintf(file, "%d.gif", digit);
     if (fp = fopen(file, "r")) {
-	im = gdImageCreateFromGif(fp);
-	fclose(fp);
+        im = gdImageCreateFromGif(fp);
+        fclose(fp);
     }
     else {
-	fprintf(stderr, "%d.gif: %s\n", digit, strerror(errno));
+        fprintf(stderr, "%d.gif: %s\n", digit, strerror(errno));
     }
     return im;
 }
@@ -385,15 +385,15 @@ int cntr_draw_digit(cntr_config_rec * c, int count)
     char *query_string = getenv("QUERY_STRING");
 
     if (query_string) {
-	cntr_parse_query(query_string, &face, &ndigit, &trans, &fcount);
+        cntr_parse_query(query_string, &face, &ndigit, &trans, &fcount);
     }
 
     if (ndigit > 0) {
-	sprintf(digitfmt, "%s%dd", "%0",
-		(ndigit <= MAXNDIGIT ? ndigit : MAXNDIGIT));
+        sprintf(digitfmt, "%s%dd", "%0",
+                (ndigit <= MAXNDIGIT ? ndigit : MAXNDIGIT));
     }
     else {
-	strcpy(digitfmt, "%d");
+        strcpy(digitfmt, "%d");
     }
     sprintf(digitbuf, digitfmt, (fcount ? fcount : count));
 
@@ -403,61 +403,61 @@ int cntr_draw_digit(cntr_config_rec * c, int count)
 
     /* Go to digits directory */
     if (chdir(c->cntr_facedir) != 0) {
-	fprintf(stderr, "%s:%s\n", c->cntr_facedir,
-			   strerror(errno));
-	goto cleanup;
+        fprintf(stderr, "%s:%s\n", c->cntr_facedir,
+                strerror(errno));
+        goto cleanup;
     }
     if (face) {
-	if (chdir(face) != 0) {
-	    fprintf(stderr, "%s:%s. Trying %s\n",
-			    c->cntr_facedir, strerror(errno), DEFAULT_FACE);
-	    if (chdir(DEFAULT_FACE) != 0) {
-		fprintf(stderr, "%s:%s\n", strerror(errno), DEFAULT_FACE);
-		goto cleanup;
-	    }
-	}
+        if (chdir(face) != 0) {
+            fprintf(stderr, "%s:%s. Trying %s\n",
+                    c->cntr_facedir, strerror(errno), DEFAULT_FACE);
+            if (chdir(DEFAULT_FACE) != 0) {
+                fprintf(stderr, "%s:%s\n", strerror(errno), DEFAULT_FACE);
+                goto cleanup;
+            }
+        }
     }
     else {
-	if (chdir(DEFAULT_FACE) != 0) {
-	    fprintf(stderr, "%s:%s\n", strerror(errno), DEFAULT_FACE);
-	    goto cleanup;
-	}
+        if (chdir(DEFAULT_FACE) != 0) {
+            fprintf(stderr, "%s:%s\n", strerror(errno), DEFAULT_FACE);
+            goto cleanup;
+        }
     }
 
     for (dp = digitbuf; dp && *dp; dp++) {
-	if (isdigit(*dp)) {
-	    i = *dp - '0';
-	    if (imdigit[i] == NULL)
-		if ((imdigit[i] = cntr_read_digit(i)) == NULL) {
-		    goto cleanup;
-		}
-	    if (gdImageSY(imdigit[i]) > height)
-		height = gdImageSY(imdigit[i]);
-	    width += gdImageSX(imdigit[i]);
-	}
+        if (isdigit(*dp)) {
+            i = *dp - '0';
+            if (imdigit[i] == NULL)
+                if ((imdigit[i] = cntr_read_digit(i)) == NULL) {
+                    goto cleanup;
+                }
+            if (gdImageSY(imdigit[i]) > height)
+                height = gdImageSY(imdigit[i]);
+            width += gdImageSX(imdigit[i]);
+        }
     }
 
     /* Create output image */
     if ((imgd = gdImageCreate(width, height)) == NULL) {
-	goto cleanup;
+        goto cleanup;
     }
 
     /* Draw rest of digits */
     width = 0;
     for (dp = digitbuf; dp && *dp; dp++) {
-	if (isdigit(*dp)) {
-	    i = *dp - '0';
-	    gdImageCopyResized(imgd, imdigit[i], width, 0, 0, 0,
-			       imdigit[i]->sx, height,
-			       imdigit[i]->sx, imdigit[i]->sy);
-	    width += gdImageSX(imdigit[i]);
-	}
+        if (isdigit(*dp)) {
+            i = *dp - '0';
+            gdImageCopyResized(imgd, imdigit[i], width, 0, 0, 0,
+                               imdigit[i]->sx, height,
+                               imdigit[i]->sx, imdigit[i]->sy);
+            width += gdImageSX(imdigit[i]);
+        }
     }
 
     /* Make output interlaced */
     gdImageInterlace(imgd, 1);
     if (trans) {
-	gdImageColorTransparent(imgd, gdImageGetPixel(imgd, 0, 0));
+        gdImageColorTransparent(imgd, gdImageGetPixel(imgd, 0, 0));
     }
     /* Spit out image */
 
@@ -475,9 +475,9 @@ int cntr_draw_digit(cntr_config_rec * c, int count)
 
 cleanup:
     for (i = 0; i < 10; i++) {
-	if (imdigit[i] != NULL) {
-	    gdImageDestroy(imdigit[i]);
-	}
+        if (imdigit[i] != NULL) {
+            gdImageDestroy(imdigit[i]);
+        }
     }
 
     if (face) free(face);
@@ -485,7 +485,7 @@ cleanup:
 }
 
 int cntr_lookup(cntr_config_rec * c,
-		    const char *uri, cntr_results * counter)
+                const char *uri, cntr_results * counter)
 {
     int result = 0;
     DBM_FILE dbm;
@@ -512,26 +512,26 @@ int cntr_lookup(cntr_config_rec * c,
      */
 #ifdef HAVE_GDBM
     if ((dbm = gdbm_open(c->cntr_file, 512, GDBM_READER, 0444, 0)) == NULL) {
-	fprintf(stderr, "Failed to open %s\n", c->cntr_file);
-    #ifdef DEBUG_CGI
+        fprintf(stderr, "Failed to open %s\n", c->cntr_file);
+#ifdef DEBUG_CGI
         fclose( dbg );
-    #endif
-	return 0;
+#endif
+        return 0;
     }
 #else
     if ((dbm = dbm_open(c->cntr_file, O_RDONLY, 0444)) == NULL) {
-	fprintf(stderr, "Failed to open %s\n", c->cntr_file);
-    #ifdef DEBUG_CGI
+        fprintf(stderr, "Failed to open %s\n", c->cntr_file);
+#ifdef DEBUG_CGI
         fclose( dbg );
-    #endif
-	return 0;
+#endif
+        return 0;
     }
 #endif
     d = dbm_fetch(dbm, q);
 
     if (d.dptr) {		/* found */
-	memcpy(counter, d.dptr, sizeof(cntr_results));
-	result = counter->count;
+        memcpy(counter, d.dptr, sizeof(cntr_results));
+        result = counter->count;
     }
 
 #ifdef DEBUG_CGI
@@ -575,7 +575,7 @@ int cntr_handler(request_rec *r)
          *   For the benefit of face=random    *
          ////////////////////////////////////////
         srand( r->request_time );
-        
+
 	return cntr_draw_digit(r, c, counter.count);
     }
     else {
@@ -621,9 +621,9 @@ int cntr_debug_handler(cntr_config_rec *c)
     printf("<pre>\n");
 
     if (path_info && strlen(path_info)) {
-	printf("<b>count(path_info)</b>\n");
-	cntr_lookup(c, path_info, &counter);
-	printf(" count = %ld\n date = %ld\n", counter.count, counter.date);
+        printf("<b>count(path_info)</b>\n");
+        cntr_lookup(c, path_info, &counter);
+        printf(" count = %ld\n date = %ld\n", counter.count, counter.date);
     }
 
     printf("</pre>\n");
@@ -631,11 +631,11 @@ int cntr_debug_handler(cntr_config_rec *c)
     printf("<h2>Queries:</h2>\n");
     printf("<pre>\n");
     if (query_string) {
-	cntr_parse_query(query_string, &face, &ndigit, &trans, &fcount);
-	printf("face   = %s\n", face ? face : "(null)");
-	printf("ndigit = %d\n", ndigit);
-	printf("trans  = %d\n", trans);
-	printf("fcount = %d\n", fcount);
+        cntr_parse_query(query_string, &face, &ndigit, &trans, &fcount);
+        printf("face   = %s\n", face ? face : "(null)");
+        printf("ndigit = %d\n", ndigit);
+        printf("trans  = %d\n", trans);
+        printf("fcount = %d\n", fcount);
     }
     printf("</pre>\n");
 
