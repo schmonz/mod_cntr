@@ -24,6 +24,8 @@
 #include <ctype.h>
 #include <dirent.h>
 
+#include <gd.h>
+
 #ifdef OS2
 #include <systems.h>
 #endif
@@ -342,12 +344,6 @@ int cntr_parse_query(
     return 0;
 }
 
-/*
- * gdmini.h needed
- */
-
-#include "gdmini.h"
-
 gdImagePtr cntr_read_digit(int digit)
 {
     char file[256];
@@ -376,7 +372,8 @@ int cntr_draw_digit(cntr_config_rec * c, int count)
     char digitbuf[256], digitfmt[16], *dp;
     gdImagePtr imdigit[10] = {NULL};
     gdImagePtr imgd;
-    dynamicPtr *imdyna;
+    void *gif_data;
+    int gif_size;
     char *face = NULL;
     int ndigit = 0;
     int trans = 0;
@@ -461,15 +458,15 @@ int cntr_draw_digit(cntr_config_rec * c, int count)
     }
     /* Spit out image */
 
-    imdyna = gdImageGifData(imgd);
+    gif_data = gdImageGifPtr(imgd, &gif_size);
 
     printf("Content-Type: image/gif\r\n");
     printf("Pragma: no-cache\r\n");
     printf("Expires: Thursday, 01-Jan-1970 00:00:00\r\n");
     printf("\r\n");
-    fwrite(imdyna->data, imdyna->logicalSize, 1, stdout);
+    fwrite(gif_data, gif_size, 1, stdout);
 
-    freeDynamic(imdyna);
+    gdFree(gif_data);
     gdImageDestroy(imgd);
     goto cleanup;
 

@@ -1,8 +1,5 @@
-counter: gdmini.o mod_cntr.o
-	cc -o counter -L/opt/pkg/lib -lgdbm gdmini.o mod_cntr.o
-
-gdmini.o: gdmini.c
-	cc -Wno-parentheses -c gdmini.c
+counter: mod_cntr.o
+	cc -o counter -L/opt/pkg/lib -lgdbm -lgd mod_cntr.o
 
 mod_cntr.o: mod_cntr.c
 	cc -Wno-parentheses -c mod_cntr.c -I/opt/pkg/include -DHAVE_GDBM=1
