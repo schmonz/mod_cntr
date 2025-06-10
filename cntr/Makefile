@@ -4,10 +4,10 @@ LIBS=		-lgdbm -lgd
 
 .PHONY: test
 test: counter
-	./test_mod_cntr.sh
+	./test_counter.sh
 
-counter: mod_cntr.o roman.o image.o keyvalue.o
-	cc -o counter ${LDFLAGS} ${LIBS} mod_cntr.o roman.o image.o keyvalue.o
+counter: counter.o roman.o image.o keyvalue.o
+	cc -o counter ${LDFLAGS} ${LIBS} counter.o roman.o image.o keyvalue.o
 
 keyvalue.o: keyvalue.c
 	cc -Wno-parentheses -c keyvalue.c ${CPPFLAGS} -DHAVE_GDBM=1
@@ -18,8 +18,8 @@ image.o: image.c
 roman.o: roman.c
 	cc -c roman.c ${CPPFLAGS}
 
-mod_cntr.o: mod_cntr.c
-	cc -c mod_cntr.c ${CPPFLAGS}
+counter.o: counter.c
+	cc -c counter.c ${CPPFLAGS}
 
 .PHONY: clean
 clean:

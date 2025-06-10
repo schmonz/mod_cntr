@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Test for mod_cntr counter display functionality using shunit2
+# Test for counter display functionality using shunit2
 
 setUp() {
     # Create test directory structure
@@ -21,7 +21,7 @@ setUp() {
         printf '\x47\x49\x46\x38\x37\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x04\x01\x00\x3b' > "${RANDOM_FACE_DIR}/${i}.gif"
     done
 
-    # Set up environment variables for mod_cntr configuration
+    # Set up environment variables for counter configuration
     export CNTR_AUTO_ADD="on"
     export CNTR_FILE="${DB_FILE}"
     export CNTR_TIMEFMT="%A, %d-%b-%Y %H:%M:%S %Z"
@@ -73,7 +73,7 @@ testCounterDisplayGeneratesGIF() {
         fi
     else
         # Assert program executed successfully
-        assertEquals "mod_cntr should exit with status 0" 0 ${exit_code}
+        assertEquals "counter should exit with status 0" 0 ${exit_code}
     fi
 
     # Assert output file was created
