@@ -1,3 +1,7 @@
+.PHONY: test
+test: counter
+	./test_mod_cntr.sh
+
 counter: mod_cntr.o
 	cc -o counter -L/opt/pkg/lib -lgdbm -lgd mod_cntr.o
 
