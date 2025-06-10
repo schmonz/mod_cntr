@@ -25,10 +25,6 @@
 #include <dirent.h>
 #include <time.h>
 
-#ifdef OS2
-#include <systems.h>
-#endif
-
 #include "keyvalue.h"
 #include "image.h"
 #include "roman.h"

@@ -143,15 +143,7 @@ int cntr_lookup(cntr_config_rec * c,
     datum d, q;
 
 #ifdef DEBUG_CGI
-#ifdef OS2
-    /* Under OS/2 need to use device con. */
-    FILE *dbg = fopen("con", "wt");
-#else
     FILE *dbg = fopen("/dev/tty", "w");
-#endif
-#endif
-
-#ifdef DEBUG_CGI
     fprintf( dbg, "cntr_lookup - URI: %s\n", uri );
 #endif
 
