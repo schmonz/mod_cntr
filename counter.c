@@ -183,6 +183,13 @@ int main(int argc, char *argv[])
 
     /* CGI mode: original functionality */
 
+    /* Initialize image system before using any image functions */
+    if (cntr_image_system_init() != 0) {
+        fprintf(stderr, "Failed to initialize image system\n");
+        cleanup_config(global_config);
+        return 1;
+    }
+
     char *request_method = getenv("REQUEST_METHOD");
     char *path_info = getenv("PATH_INFO");
 
@@ -203,6 +210,7 @@ int main(int argc, char *argv[])
             printf("Content-Type: text/plain\r\n\r\n");
             printf("Error: No counter file configured\n");
             cleanup_config(global_config);
+            cntr_image_cleanup();
             return 1;
         }
 
@@ -214,6 +222,7 @@ int main(int argc, char *argv[])
                 printf("Error: %s\n", error_msg);
                 free(error_msg);
                 cleanup_config(global_config);
+                cntr_image_cleanup();
                 return 1;
             }
             cntr_lookup(global_config, path_info, &counter);
@@ -223,5 +232,6 @@ int main(int argc, char *argv[])
     }
 
     cleanup_config(global_config);
+    cntr_image_cleanup();
     return 0;
 }

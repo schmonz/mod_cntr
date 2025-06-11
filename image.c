@@ -13,6 +13,164 @@ extern cntr_config_rec *global_config;
 
 #define DEFAULT_FACE	"default"
 
+/* =====================================================
+ * GD-SPECIFIC IMPLEMENTATION OF ABSTRACTION LAYER
+ * ===================================================== */
+
+/* GD-specific image structure */
+struct cntr_image {
+    gdImagePtr gd_image;
+};
+
+/* GD Implementation functions */
+static cntr_image_t* gd_create(int width, int height)
+{
+    cntr_image_t* img = malloc(sizeof(cntr_image_t));
+    if (!img) return NULL;
+
+    img->gd_image = gdImageCreate(width, height);
+    if (!img->gd_image) {
+        free(img);
+        return NULL;
+    }
+
+    return img;
+}
+
+static cntr_image_t* gd_load_from_file(const char* filename)
+{
+    FILE* fp;
+    cntr_image_t* img;
+
+    fp = fopen(filename, "r");
+    if (!fp) {
+        fprintf(stderr, "%s: %s\n", filename, strerror(errno));
+        return NULL;
+    }
+
+    img = malloc(sizeof(cntr_image_t));
+    if (!img) {
+        fclose(fp);
+        return NULL;
+    }
+
+    img->gd_image = gdImageCreateFromGif(fp);
+    fclose(fp);
+
+    if (!img->gd_image) {
+        free(img);
+        return NULL;
+    }
+
+    return img;
+}
+
+static void gd_destroy(cntr_image_t* img)
+{
+    if (img) {
+        if (img->gd_image) {
+            gdImageDestroy(img->gd_image);
+        }
+        free(img);
+    }
+}
+
+static int gd_get_width(cntr_image_t* img)
+{
+    if (!img || !img->gd_image) return 0;
+    return gdImageSX(img->gd_image);
+}
+
+static int gd_get_height(cntr_image_t* img)
+{
+    if (!img || !img->gd_image) return 0;
+    return gdImageSY(img->gd_image);
+}
+
+static void gd_copy_resized(cntr_image_t* dst, cntr_image_t* src,
+                           int dst_x, int dst_y, int src_x, int src_y,
+                           int dst_w, int dst_h, int src_w, int src_h)
+{
+    if (!dst || !src || !dst->gd_image || !src->gd_image) return;
+
+    gdImageCopyResized(dst->gd_image, src->gd_image,
+                      dst_x, dst_y, src_x, src_y,
+                      dst_w, dst_h, src_w, src_h);
+}
+
+static void gd_set_interlaced(cntr_image_t* img, int interlaced)
+{
+    if (!img || !img->gd_image) return;
+    gdImageInterlace(img->gd_image, interlaced);
+}
+
+static void gd_set_transparent(cntr_image_t* img, int x, int y)
+{
+    if (!img || !img->gd_image) return;
+    int color = gdImageGetPixel(img->gd_image, x, y);
+    gdImageColorTransparent(img->gd_image, color);
+}
+
+static void* gd_get_gif_data(cntr_image_t* img, int* size)
+{
+    if (!img || !img->gd_image || !size) return NULL;
+    return gdImageGifPtr(img->gd_image, size);
+}
+
+static void gd_free_data(void* data)
+{
+    if (data) {
+        gdFree(data);
+    }
+}
+
+/* GD operations table */
+static cntr_image_ops_t gd_ops = {
+    .create = gd_create,
+    .load_from_file = gd_load_from_file,
+    .destroy = gd_destroy,
+    .get_width = gd_get_width,
+    .get_height = gd_get_height,
+    .copy_resized = gd_copy_resized,
+    .set_interlaced = gd_set_interlaced,
+    .set_transparent = gd_set_transparent,
+    .get_gif_data = gd_get_gif_data,
+    .free_data = gd_free_data
+};
+
+/* Global operations pointer */
+cntr_image_ops_t* cntr_image_ops = NULL;
+
+/* Initialize with GD implementation */
+static int cntr_image_init_gd(void)
+{
+    cntr_image_ops = &gd_ops;
+    return 0;
+}
+
+/* Generic initialization function */
+int cntr_image_init(cntr_image_ops_t* ops)
+{
+    if (!ops) return -1;
+    cntr_image_ops = ops;
+    return 0;
+}
+
+void cntr_image_cleanup(void)
+{
+    cntr_image_ops = NULL;
+}
+
+/* =====================================================
+ * PUBLIC INTERFACE FUNCTIONS
+ * ===================================================== */
+
+int cntr_image_system_init(void)
+{
+    /* Initialize with GD implementation */
+    return cntr_image_init_gd();
+}
+
 int cntr_parse_query(
     char *query, char **face, int *ndigit, int *trans, int *fcount)
 {
@@ -76,32 +234,29 @@ int cntr_parse_query(
     return 0;
 }
 
-gdImagePtr cntr_read_digit(int digit)
+cntr_image_t* cntr_read_digit(int digit)
 {
     char file[256];
-    gdImagePtr im = NULL;
-    FILE *fp;
+    cntr_image_t* img = NULL;
 
     sprintf(file, "%d.gif", digit);
-    if ((fp = fopen(file, "r"))) {
-        im = gdImageCreateFromGif(fp);
-        fclose(fp);
-    }
-    else {
+    img = cntr_image_load_from_file(file);
+
+    if (!img) {
         fprintf(stderr, "%d.gif: %s\n", digit, strerror(errno));
     }
-    return im;
+
+    return img;
 }
 
 int cntr_draw_digit(cntr_config_rec * c, int count)
 {
     int i;
-    ////int resize = 0;
     int width = 0;
     int height = 0;
     char digitbuf[256], digitfmt[16], *dp;
-    gdImagePtr imdigit[10] = {NULL};
-    gdImagePtr imgd;
+    cntr_image_t* imdigit[10] = {NULL};
+    cntr_image_t* imgd = NULL;
     void *gif_data;
     int gif_size;
     char *face = NULL;
@@ -151,60 +306,68 @@ int cntr_draw_digit(cntr_config_rec * c, int count)
         }
     }
 
+    /* Load digit images and calculate dimensions */
     for (dp = digitbuf; dp && *dp; dp++) {
         if (isdigit(*dp)) {
             i = *dp - '0';
-            if (imdigit[i] == NULL)
+            if (imdigit[i] == NULL) {
                 if ((imdigit[i] = cntr_read_digit(i)) == NULL) {
                     goto cleanup;
                 }
-            if (gdImageSY(imdigit[i]) > height)
-                height = gdImageSY(imdigit[i]);
-            width += gdImageSX(imdigit[i]);
+            }
+            if (cntr_image_get_height(imdigit[i]) > height)
+                height = cntr_image_get_height(imdigit[i]);
+            width += cntr_image_get_width(imdigit[i]);
         }
     }
 
     /* Create output image */
-    if ((imgd = gdImageCreate(width, height)) == NULL) {
+    if ((imgd = cntr_image_create(width, height)) == NULL) {
         goto cleanup;
     }
 
-    /* Draw rest of digits */
+    /* Draw digits */
     width = 0;
     for (dp = digitbuf; dp && *dp; dp++) {
         if (isdigit(*dp)) {
             i = *dp - '0';
-            gdImageCopyResized(imgd, imdigit[i], width, 0, 0, 0,
-                               imdigit[i]->sx, height,
-                               imdigit[i]->sx, imdigit[i]->sy);
-            width += gdImageSX(imdigit[i]);
+            cntr_image_copy_resized(imgd, imdigit[i], width, 0, 0, 0,
+                                   cntr_image_get_width(imdigit[i]), height,
+                                   cntr_image_get_width(imdigit[i]),
+                                   cntr_image_get_height(imdigit[i]));
+            width += cntr_image_get_width(imdigit[i]);
         }
     }
 
-    /* Make output interlaced */
-    gdImageInterlace(imgd, 1);
+    /* Apply image effects */
+    cntr_image_set_interlaced(imgd, 1);
     if (trans) {
-        gdImageColorTransparent(imgd, gdImageGetPixel(imgd, 0, 0));
+        cntr_image_set_transparent(imgd, 0, 0);
     }
-    /* Spit out image */
 
-    gif_data = gdImageGifPtr(imgd, &gif_size);
+    /* Output image */
+    gif_data = cntr_image_get_gif_data(imgd, &gif_size);
+    if (gif_data) {
+        printf("Content-Type: image/gif\r\n");
+        printf("Pragma: no-cache\r\n");
+        printf("Expires: Thursday, 01-Jan-1970 00:00:00\r\n");
+        printf("\r\n");
+        fwrite(gif_data, gif_size, 1, stdout);
 
-    printf("Content-Type: image/gif\r\n");
-    printf("Pragma: no-cache\r\n");
-    printf("Expires: Thursday, 01-Jan-1970 00:00:00\r\n");
-    printf("\r\n");
-    fwrite(gif_data, gif_size, 1, stdout);
-
-    gdFree(gif_data);
-    gdImageDestroy(imgd);
-    goto cleanup;
+        cntr_image_free_data(gif_data);
+    }
 
 cleanup:
+    /* Clean up digit images */
     for (i = 0; i < 10; i++) {
         if (imdigit[i] != NULL) {
-            gdImageDestroy(imdigit[i]);
+            cntr_image_destroy(imdigit[i]);
         }
+    }
+
+    /* Clean up output image */
+    if (imgd) {
+        cntr_image_destroy(imgd);
     }
 
     if (face) free(face);
