@@ -1,19 +1,18 @@
 CC=		cc
 CFLAGS=		-std=c99 -O2
-CPPFLAGS=	-I/opt/pkg/include
-LDFLAGS=	-L/opt/pkg/lib
-LIBS=		-lsqlite3 -lpng16
+CPPFLAGS!=	pkg-config --cflags sqlite3 libpng
+LDFLAGS!=	pkg-config --libs sqlite3 libpng
 
-.PHONY: test
 test: counter
 	./test_counter.sh
 
 counter: counter.o roman.o image.o keyvalue.o
-	${CC} -o $@ ${LDFLAGS} ${LIBS} counter.o roman.o image.o keyvalue.o
+	${CC} -o $@ ${LDFLAGS} counter.o roman.o image.o keyvalue.o
 
 .c.o:
 	${CC} -c $< ${CFLAGS} ${CPPFLAGS}
 
-.PHONY: clean
 clean:
 	rm -f counter *.o *.db
+
+.PHONY: test clean
