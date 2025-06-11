@@ -8,7 +8,6 @@
 #include <png.h>
 #include "image.h"
 
-extern char *ap_pstrdup(const char *s);
 extern cntr_config_rec *global_config;
 
 #define DEFAULT_FACE	"default"
@@ -486,12 +485,12 @@ int cntr_parse_query(
         return 0;
     }
 
-    qbuf = ap_pstrdup(query);
+    qbuf = strdup(query);
     q = strtok(qbuf, "&");
 
     do {
         if (strncasecmp(q, "face=", 5) == 0) {
-            *face = ap_pstrdup(q + 5);
+            *face = strdup(q + 5);
 
             /******************************************
              *                                        *
@@ -509,14 +508,14 @@ int cntr_parse_query(
                         if( *(direntry->d_name) == '.' )
                             continue;
                         if(face_count < 256) {
-                            faces[face_count++] = ap_pstrdup(direntry->d_name);
+                            faces[face_count++] = strdup(direntry->d_name);
                         }
                     } /* wend */
                     closedir(facedir);
 
                     if(face_count > 0) {
                         free(*face);
-                        *face = ap_pstrdup(faces[rand() % face_count]);
+                        *face = strdup(faces[rand() % face_count]);
 
                         for(int i = 0; i < face_count; i++) {
                             free(faces[i]);

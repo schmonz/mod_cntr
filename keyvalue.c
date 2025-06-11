@@ -10,8 +10,6 @@
 #include <sqlite3.h>
 #include "keyvalue.h"
 
-extern char *ap_pstrdup(const char *s);
-
 /* SQLite-specific handle structure */
 struct kvstore_handle {
     sqlite3 *db;
@@ -86,7 +84,7 @@ static kvstore_handle_t* sqlite_open(const char *path, kvstore_mode_t mode, kvst
     }
 
     handle->mode = mode;
-    handle->path = ap_pstrdup(path);
+    handle->path = strdup(path);
     *error = KVSTORE_OK;
     return handle;
 }
@@ -297,7 +295,7 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
     kvstore_error_t error;
     
     /* Normalize the URI stripping out double "//" */
-    char *puri = ap_pstrdup(uri);
+    char *puri = strdup(uri);
     char *ptr = puri;
     while (ptr && *ptr) {
         if (*ptr == '/' && *(ptr + 1) == '/') {
@@ -317,7 +315,7 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
     /* Open the key-value store */
     kvstore_handle_t *handle = kv->open(c->cntr_file, KVSTORE_MODE_CREATE, &error);
     if (!handle) {
-        char *err_msg = ap_pstrdup(kv->error_string(error));
+        char *err_msg = strdup(kv->error_string(error));
         free(puri);
         return err_msg;
     }
@@ -327,7 +325,7 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
     if (!key.data) {
         kv->close(handle);
         free(puri);
-        return ap_pstrdup("Memory allocation error");
+        return strdup("Memory allocation error");
     }
 
     /* Try to get existing value */
@@ -351,7 +349,7 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
         results->date = time(0L);
     } else {
         /* Error occurred */
-        char *err_msg = ap_pstrdup(kv->error_string(error));
+        char *err_msg = strdup(kv->error_string(error));
         kvstore_key_free(&key);
         kv->close(handle);
         free(puri);
@@ -366,7 +364,7 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
         
         error = kv->put(handle, &key, &new_value);
         if (error != KVSTORE_OK) {
-            char *err_msg = ap_pstrdup(kv->error_string(error));
+            char *err_msg = strdup(kv->error_string(error));
             kvstore_key_free(&key);
             kv->close(handle);
             free(puri);
@@ -437,7 +435,7 @@ char *cntr_set(cntr_results *results, cntr_config_rec *c, const char *uri, unsig
     kvstore_error_t error;
 
     /* Normalize the URI stripping out double "//" */
-    char *puri = ap_pstrdup(uri);
+    char *puri = strdup(uri);
     char *ptr = puri;
     while (ptr && *ptr) {
         if (*ptr == '/' && *(ptr + 1) == '/') {
@@ -457,7 +455,7 @@ char *cntr_set(cntr_results *results, cntr_config_rec *c, const char *uri, unsig
     /* Open the key-value store */
     kvstore_handle_t *handle = kv->open(c->cntr_file, KVSTORE_MODE_CREATE, &error);
     if (!handle) {
-        char *err_msg = ap_pstrdup(kv->error_string(error));
+        char *err_msg = strdup(kv->error_string(error));
         free(puri);
         return err_msg;
     }
@@ -467,7 +465,7 @@ char *cntr_set(cntr_results *results, cntr_config_rec *c, const char *uri, unsig
     if (!key.data) {
         kv->close(handle);
         free(puri);
-        return ap_pstrdup("Memory allocation error");
+        return strdup("Memory allocation error");
     }
 
     /* Store the new record */
@@ -477,7 +475,7 @@ char *cntr_set(cntr_results *results, cntr_config_rec *c, const char *uri, unsig
 
     error = kv->put(handle, &key, &new_value);
     if (error != KVSTORE_OK) {
-        char *err_msg = ap_pstrdup(kv->error_string(error));
+        char *err_msg = strdup(kv->error_string(error));
         kvstore_key_free(&key);
         kv->close(handle);
         free(puri);

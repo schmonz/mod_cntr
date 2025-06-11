@@ -43,12 +43,6 @@
  */
 cntr_config_rec *global_config = NULL;
 
-char *ap_pstrdup(const char *s)
-{
-    if (!s) return NULL;
-    return strdup(s);
-}
-
 /*
  * Initialize configuration from environment variables
  */
@@ -63,13 +57,13 @@ cntr_config_rec *init_config()
     conf->cntr_auto_add = (env_val && !strcasecmp(env_val, "on")) ? 1 : 0;
 
     env_val = getenv("CNTR_FILE");
-    conf->cntr_file = env_val ? ap_pstrdup(env_val) : ap_pstrdup(DEFAULT_CNTR_FILE);
+    conf->cntr_file = env_val ? strdup(env_val) : strdup(DEFAULT_CNTR_FILE);
 
     env_val = getenv("CNTR_TIMEFMT");
-    conf->cntr_timefmt = env_val ? ap_pstrdup(env_val) : ap_pstrdup(DEFAULT_CNTR_TIMEFMT);
+    conf->cntr_timefmt = env_val ? strdup(env_val) : strdup(DEFAULT_CNTR_TIMEFMT);
 
     env_val = getenv("CNTR_FACEDIR");
-    conf->cntr_facedir = env_val ? ap_pstrdup(env_val) : ap_pstrdup(DEFAULT_CNTR_FACEDIR);
+    conf->cntr_facedir = env_val ? strdup(env_val) : strdup(DEFAULT_CNTR_FACEDIR);
 
     return conf;
 }
