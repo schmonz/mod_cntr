@@ -122,7 +122,7 @@ char *cntr_inc(cntr_results * results,
     while (ptr && *ptr) {
         if (*ptr == '/' && *(ptr + 1) == '/') {
             char *q = ptr + 1;
-            while (*q = *(q + 1))
+            while ((*q = *(q + 1)))
                 q++;
         }
         else {

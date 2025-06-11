@@ -10,10 +10,10 @@ counter: counter.o roman.o image.o keyvalue.o
 	cc -o counter ${LDFLAGS} ${LIBS} counter.o roman.o image.o keyvalue.o
 
 keyvalue.o: keyvalue.c
-	cc -Wno-parentheses -c keyvalue.c ${CPPFLAGS} -DHAVE_GDBM=1
+	cc -c keyvalue.c ${CPPFLAGS} -DHAVE_GDBM=1
 
 image.o: image.c
-	cc -Wno-parentheses -c image.c ${CPPFLAGS}
+	cc -c image.c ${CPPFLAGS}
 
 roman.o: roman.c
 	cc -c roman.c ${CPPFLAGS}

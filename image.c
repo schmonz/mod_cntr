@@ -41,7 +41,7 @@ int cntr_parse_query(
                     char *faces[256];
                     int face_count = 0;
 
-                    while( direntry = readdir( facedir ) ) {
+                    while(( direntry = readdir( facedir ) )) {
                         if( *(direntry->d_name) == '.' )
                             continue;
                         if(face_count < 256) {
@@ -71,7 +71,7 @@ int cntr_parse_query(
         else if (strncasecmp(q, "fcount=", 7) == 0) {
             *fcount = atoi(q + 7);
         }
-    } while (q = strtok(NULL, "&"));
+    } while ((q = strtok(NULL, "&")));
     free(qbuf);
     return 0;
 }
@@ -83,7 +83,7 @@ gdImagePtr cntr_read_digit(int digit)
     FILE *fp;
 
     sprintf(file, "%d.gif", digit);
-    if (fp = fopen(file, "r")) {
+    if ((fp = fopen(file, "r"))) {
         im = gdImageCreateFromGif(fp);
         fclose(fp);
     }
