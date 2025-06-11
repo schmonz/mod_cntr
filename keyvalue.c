@@ -14,9 +14,9 @@ extern char *ap_pstrdup(const char *s);
 /*
  * open dbm with file lock.
  */
-DBM_FILE do_dbm_open(char *pcntr_file, char *err)
+GDBM_FILE do_dbm_open(char *pcntr_file, char *err)
 {
-    DBM_FILE dbm;
+    GDBM_FILE dbm;
     if ((dbm = gdbm_open(pcntr_file, 512, GDBM_WRCREAT, 0666, 0)) == NULL) {
         sprintf(err, "Failed to open counter dbmfile: %s",
                 gdbm_strerror(gdbm_errno));
@@ -24,10 +24,10 @@ DBM_FILE do_dbm_open(char *pcntr_file, char *err)
     return dbm;
 }
 
-void do_dbm_close(DBM_FILE dbm)
+void do_dbm_close(GDBM_FILE dbm)
 {
     /* unlocking is automatically taken care of */
-    dbm_close(dbm);
+    gdbm_close(dbm);
 }
 
 /*
@@ -41,7 +41,7 @@ void do_dbm_close(DBM_FILE dbm)
 char *cntr_incdbm(cntr_results * results,
                   cntr_config_rec * c, char *uri)
 {
-    DBM_FILE dbm;
+    GDBM_FILE dbm;
     char err[256];
     datum d, q;
 
@@ -55,7 +55,7 @@ char *cntr_incdbm(cntr_results * results,
         return ap_pstrdup(err);
     }
 
-    d = dbm_fetch(dbm, q);
+    d = gdbm_fetch(dbm, q);
 
     /*
      * If found, inclement the counter
@@ -77,7 +77,7 @@ char *cntr_incdbm(cntr_results * results,
     if (d.dptr || c->cntr_auto_add) {
         d.dptr = (void *) results;
         d.dsize = sizeof(cntr_results);
-        dbm_store(dbm, q, d, DBM_REPLACE);
+        gdbm_store(dbm, q, d, GDBM_REPLACE);
     }
 
     do_dbm_close(dbm);
@@ -110,7 +110,7 @@ int cntr_lookup(cntr_config_rec * c,
                 const char *uri, cntr_results * counter)
 {
     int result = 0;
-    DBM_FILE dbm;
+    GDBM_FILE dbm;
     datum d, q;
 
 #ifdef DEBUG_CGI
@@ -131,7 +131,7 @@ int cntr_lookup(cntr_config_rec * c,
 #endif
         return 0;
     }
-    d = dbm_fetch(dbm, q);
+    d = gdbm_fetch(dbm, q);
 
     if (d.dptr) {		/* found */
         memcpy(counter, d.dptr, sizeof(cntr_results));
@@ -141,6 +141,6 @@ int cntr_lookup(cntr_config_rec * c,
 #ifdef DEBUG_CGI
     fclose( dbg );
 #endif
-    dbm_close(dbm);
+    gdbm_close(dbm);
     return result;
 }
