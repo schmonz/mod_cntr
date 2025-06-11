@@ -36,7 +36,7 @@
  */
 #define DEFAULT_CNTR_FILE	""
 #define DEFAULT_CNTR_TIMEFMT	"%A, %d-%b-%Y %H:%M:%S %Z"
-#define DEFAULT_CNTR_FACEDIR    "/usr/local/apache/share/digits"
+#define DEFAULT_CNTR_FACEDIR    "/Users/schmonz/trees/mod_cntr/digits"
 
 /*
  * Create config data structure

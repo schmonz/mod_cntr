@@ -8,17 +8,17 @@ setUp() {
     FACE_DIR="${TEST_DIR}/digits/default"
     RANDOM_FACE_DIR="${TEST_DIR}/digits/random_face"
     DB_FILE="${TEST_DIR}/counter.db"
-    OUTPUT_FILE="${TEST_DIR}/output.gif"
+    OUTPUT_FILE="${TEST_DIR}/output.png"
     ERROR_FILE="${TEST_DIR}/error.log"
 
     mkdir -p "${FACE_DIR}"
     mkdir -p "${RANDOM_FACE_DIR}"
 
-    # Create minimal valid GIF files for digits 0-9 (1x1 pixel GIF87a format)
-    # This is a minimal valid GIF: GIF87a header + 1x1 canvas + minimal image data
+    # Create minimal valid PNG files for digits 0-9 (1x1 pixel PNG format)
+    # This is a minimal valid PNG: PNG signature + IHDR + IDAT + IEND
     for i in {0..9}; do
-        printf '\x47\x49\x46\x38\x37\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x04\x01\x00\x3b' > "${FACE_DIR}/${i}.gif"
-        printf '\x47\x49\x46\x38\x37\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x04\x01\x00\x3b' > "${RANDOM_FACE_DIR}/${i}.gif"
+        printf '\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90\x77\x53\xde\x00\x00\x00\x0c\x49\x44\x41\x54\x08\x99\x01\x01\x00\x00\xff\xff\x00\x00\x00\x02\x00\x01\x73\x75\x01\x18\x00\x00\x00\x00\x49\x45\x4e\x44\xae\x42\x60\x82' > "${FACE_DIR}/${i}.png"
+        printf '\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90\x77\x53\xde\x00\x00\x00\x0c\x49\x44\x41\x54\x08\x99\x01\x01\x00\x00\xff\xff\x00\x00\x00\x02\x00\x01\x73\x75\x01\x18\x00\x00\x00\x00\x49\x45\x4e\x44\xae\x42\x60\x82' > "${RANDOM_FACE_DIR}/${i}.png"
     done
 
     # Set up environment variables for counter configuration
@@ -55,7 +55,7 @@ tearDown() {
     unset REQUEST_METHOD PATH_INFO QUERY_STRING HTTP_REFERER REQUEST_URI
 }
 
-testCounterDisplayGeneratesGIF() {
+testCounterDisplayGeneratesPNG() {
     ./counter > "${OUTPUT_FILE}" 2>"${ERROR_FILE}"
     local exit_code=$?
 
@@ -85,13 +85,13 @@ testCounterDisplayGeneratesGIF() {
         # If we have output, check its format
         if [ -f "${OUTPUT_FILE}" ] && [ -s "${OUTPUT_FILE}" ]; then
             # The program outputs HTTP headers first, so let's check for those
-            # Look for the Content-Type header followed by the GIF data
-            local gif_start=$(grep -abo "GIF8[79]a" "${OUTPUT_FILE}" | head -1 | cut -d: -f1 2>/dev/null || echo "")
-            if [ -n "${gif_start}" ]; then
-                # Extract just the GIF part starting from the GIF header
-                local gif_header=$(dd if="${OUTPUT_FILE}" bs=1 skip=${gif_start} count=6 2>/dev/null)
-                assertTrue "Output should contain a GIF file (GIF87a or GIF89a)" \
-                    "[ '${gif_header}' = 'GIF87a' ] || [ '${gif_header}' = 'GIF89a' ]"
+            # Look for the PNG signature
+            local png_start=$(grep -abo "PNG" "${OUTPUT_FILE}" | head -1 | cut -d: -f1 2>/dev/null || echo "")
+            if [ -n "${png_start}" ]; then
+                # Extract just the PNG part starting from the PNG signature
+                local png_header=$(dd if="${OUTPUT_FILE}" bs=1 skip=$((png_start-1)) count=8 2>/dev/null)
+                assertTrue "Output should contain a PNG file" \
+                    "echo '${png_header}' | grep -q '^.PNG'"
             else
                 # Check if output starts with HTTP headers (which is expected)
                 if head -c 50 "${OUTPUT_FILE}" | grep -q "Content-Type"; then
@@ -180,7 +180,7 @@ testTransparencyOption() {
 
     ./counter > "${OUTPUT_FILE}" 2>"${ERROR_FILE}"
 
-    # Should still generate output (transparency is applied to GIF)
+    # Should still generate output (transparency is applied to PNG)
     assertTrue "Should generate output with transparency" "[ -f '${OUTPUT_FILE}' ]"
 }
 
@@ -206,7 +206,7 @@ testFixedCount() {
 
 testMissingDigitFiles() {
     # Remove some digit files to test error handling
-    rm -f "${FACE_DIR}/5.gif"
+    rm -f "${FACE_DIR}/5.png"
     export PATH_INFO="/test/page"
     export QUERY_STRING="fcount=555"  # This will require digit 5
 
@@ -214,7 +214,7 @@ testMissingDigitFiles() {
 
     # Should fail gracefully when digit files are missing
     assertTrue "Should generate error when digit files missing" "[ -s '${ERROR_FILE}' ]"
-    assertTrue "Should report missing digit file" "grep -q '5.gif' '${ERROR_FILE}'"
+    assertTrue "Should report missing digit file" "grep -q '5.png' '${ERROR_FILE}'"
 }
 
 testInvalidFaceDirectory() {
@@ -235,7 +235,7 @@ testHTTPHeaders() {
     ./counter > "${OUTPUT_FILE}" 2>"${ERROR_FILE}"
 
     if [ -f "${OUTPUT_FILE}" ] && [ -s "${OUTPUT_FILE}" ]; then
-        assertTrue "Should output Content-Type header" "grep -q 'Content-Type: image/gif' '${OUTPUT_FILE}'"
+        assertTrue "Should output Content-Type header" "grep -q 'Content-Type: image/png' '${OUTPUT_FILE}'"
         assertTrue "Should output Pragma header" "grep -q 'Pragma: no-cache' '${OUTPUT_FILE}'"
         assertTrue "Should output Expires header" "grep -q 'Expires:' '${OUTPUT_FILE}'"
     fi

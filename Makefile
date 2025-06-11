@@ -2,7 +2,7 @@ CC=		cc
 CFLAGS=		-std=c99 -O2
 CPPFLAGS=	-I/opt/pkg/include
 LDFLAGS=	-L/opt/pkg/lib
-LIBS=		-lsqlite3 -lgd
+LIBS=		-lsqlite3 -lpng16
 
 .PHONY: test
 test: counter
@@ -16,4 +16,4 @@ counter: counter.o roman.o image.o keyvalue.o
 
 .PHONY: clean
 clean:
-	rm -f counter *.o
+	rm -f counter *.o *.db
