@@ -325,5 +325,28 @@ testConfigurationCleanup() {
     rm -f "${OUTPUT_FILE}".* "${ERROR_FILE}".*
 }
 
+testInitialAndCumulativePageCount() {
+    local unique_slug="/test/cgi_cli_$_$(date +%s)"
+
+    ./counter "${unique_slug}" > "${OUTPUT_FILE}.cli1" 2>"${ERROR_FILE}.cli1"
+    local cli_exit_code1=$?
+    local cli_output1=$(cat "${OUTPUT_FILE}.cli1" 2>/dev/null)
+    assertEquals "CLI before exited 0" "0" "${cli_exit_code1}"
+    assertEquals "CLI before says 0 hits for slug" "0" "${cli_output1}"
+
+    env PATH_INFO="${unique_slug}" ./counter > "${OUTPUT_FILE}.cgi1" 2>"${ERROR_FILE}.cgi1"
+    local cgi_exit_code=$?
+    assertEquals "CGI exited 0" "0" "${cgi_exit_code}"
+
+    ./counter "${unique_slug}" > "${OUTPUT_FILE}.cli2" 2>"${ERROR_FILE}.cli2"
+    local cli_exit_code2=$?
+    local cli_output2=$(cat "${OUTPUT_FILE}.cli2" 2>/dev/null)
+    assertEquals "CLI after exited 0" "0" "${cli_exit_code2}"
+    assertEquals "CLI after says 1 hit for slug" "1" "${cli_output2}"
+
+    # Clean up extra files
+    rm -f "${OUTPUT_FILE}".cgi* "${OUTPUT_FILE}".cli* "${ERROR_FILE}".cgi* "${ERROR_FILE}".cli*
+}
+
 # Load shunit2
 . shunit2

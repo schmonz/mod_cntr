@@ -143,13 +143,45 @@ int cntr_debug_handler(cntr_config_rec *c)
     return 0;
 }
 
-int main()
+/*
+ * Handle command-line key lookup mode
+ */
+int handle_cli_lookup(cntr_config_rec *config, const char *key)
+{
+    cntr_results counter;
+    counter.count = 0;
+    counter.date = 0;
+
+    if (!config->cntr_file || !*config->cntr_file) {
+        fprintf(stderr, "Error: No counter file configured\n");
+        return 1;
+    }
+
+    /* Look up the key in the backing storage */
+    cntr_lookup(config, key, &counter);
+
+    /* Print the stored value (count) */
+    printf("%ld\n", counter.count);
+    return 0;
+}
+
+int main(int argc, char *argv[])
 {
     global_config = init_config();
     if (!global_config) {
         fprintf(stderr, "Failed to initialize configuration\n");
         return 1;
     }
+
+    /* Check if we're in CLI mode (command-line argument provided) */
+    if (argc > 1) {
+        /* CLI mode: lookup key and print value */
+        int result = handle_cli_lookup(global_config, argv[1]);
+        cleanup_config(global_config);
+        return result;
+    }
+
+    /* CGI mode: original functionality */
 
     char *request_method = getenv("REQUEST_METHOD");
     char *path_info = getenv("PATH_INFO");
@@ -175,6 +207,7 @@ int main()
         }
 
         if (path_info && strlen(path_info)) {
+            cntr_inc(&counter, global_config, path_info); // XXX error checking
             cntr_lookup(global_config, path_info, &counter);
         }
 
