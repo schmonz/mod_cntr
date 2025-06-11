@@ -430,3 +430,62 @@ int cntr_lookup(cntr_config_rec *c, const char *uri, cntr_results *counter)
     
     return result;
 }
+
+char *cntr_set(cntr_results *results, cntr_config_rec *c, const char *uri, unsigned long count)
+{
+    kvstore_interface_t *kv = kvstore_get_sqlite_interface();
+    kvstore_error_t error;
+
+    /* Normalize the URI stripping out double "//" */
+    char *puri = ap_pstrdup(uri);
+    char *ptr = puri;
+    while (ptr && *ptr) {
+        if (*ptr == '/' && *(ptr + 1) == '/') {
+            char *q = ptr + 1;
+            while ((*q = *(q + 1)))
+                q++;
+        }
+        else {
+            ptr++;
+        }
+    }
+
+    /* Initialize results with the provided count */
+    results->count = count;
+    results->date = time(0L);
+
+    /* Open the key-value store */
+    kvstore_handle_t *handle = kv->open(c->cntr_file, KVSTORE_MODE_CREATE, &error);
+    if (!handle) {
+        char *err_msg = ap_pstrdup(kv->error_string(error));
+        free(puri);
+        return err_msg;
+    }
+
+    /* Create key from URI */
+    kvstore_key_t key = kvstore_key_from_string(puri);
+    if (!key.data) {
+        kv->close(handle);
+        free(puri);
+        return ap_pstrdup("Memory allocation error");
+    }
+
+    /* Store the new record */
+    kvstore_value_t new_value;
+    new_value.data = results;
+    new_value.size = sizeof(cntr_results);
+
+    error = kv->put(handle, &key, &new_value);
+    if (error != KVSTORE_OK) {
+        char *err_msg = ap_pstrdup(kv->error_string(error));
+        kvstore_key_free(&key);
+        kv->close(handle);
+        free(puri);
+        return err_msg;
+    }
+
+    kvstore_key_free(&key);
+    kv->close(handle);
+    free(puri);
+    return NULL;  /* Success */
+}

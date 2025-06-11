@@ -70,5 +70,6 @@ void kvstore_value_free(kvstore_value_t *value);
 /* High-level counter functions using the abstraction */
 char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri);
 int cntr_lookup(cntr_config_rec *c, const char *uri, cntr_results *counter);
+char *cntr_set(cntr_results *results, cntr_config_rec *c, const char *uri, unsigned long count);
 
 #endif

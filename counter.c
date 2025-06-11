@@ -165,6 +165,39 @@ int handle_cli_lookup(cntr_config_rec *config, const char *key)
     return 0;
 }
 
+/*
+ * Handle command-line key set mode
+ */
+int handle_cli_set(cntr_config_rec *config, const char *key, const char *value_str)
+{
+    cntr_results counter;
+    counter.count = 0;
+    counter.date = time(NULL);
+
+    if (!config->cntr_file || !*config->cntr_file) {
+        fprintf(stderr, "Error: No counter file configured\n");
+        return 1;
+    }
+
+    /* Parse the value string to a number */
+    char *endptr;
+    long value = strtol(value_str, &endptr, 10);
+    if (*endptr != '\0' || value < 0) {
+        fprintf(stderr, "Error: Invalid counter value '%s'\n", value_str);
+        return 1;
+    }
+
+    /* Set the counter value in the backing storage */
+    char *error_msg = cntr_set(&counter, config, key, value);
+    if (error_msg) {
+        fprintf(stderr, "Error: %s\n", error_msg);
+        free(error_msg);
+        return 1;
+    }
+
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     global_config = init_config();
@@ -175,8 +208,22 @@ int main(int argc, char *argv[])
 
     /* Check if we're in CLI mode (command-line argument provided) */
     if (argc > 1) {
-        /* CLI mode: lookup key and print value */
-        int result = handle_cli_lookup(global_config, argv[1]);
+        int result;
+        if (argc == 2) {
+            /* CLI mode: lookup key and print value */
+            result = handle_cli_lookup(global_config, argv[1]);
+        } else if (argc == 3) {
+            /* CLI mode: set key to value */
+            result = handle_cli_set(global_config, argv[1], argv[2]);
+        } else {
+            /* Too many arguments */
+            fprintf(stderr, "Usage: %s [key] [value]\n", argv[0]);
+            fprintf(stderr, "  No args: Run as CGI\n");
+            fprintf(stderr, "  One arg: Lookup key value\n");
+            fprintf(stderr, "  Two args: Set key to value\n");
+            cleanup_config(global_config);
+            return 1;
+        }
         cleanup_config(global_config);
         return result;
     }

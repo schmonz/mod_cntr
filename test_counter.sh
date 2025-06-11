@@ -426,5 +426,24 @@ testInitialAndCumulativePageCount() {
     rm -f "${OUTPUT_FILE}".cgi* "${OUTPUT_FILE}".cli* "${ERROR_FILE}".cgi* "${ERROR_FILE}".cli*
 }
 
+testSetCounterToArbitraryValue() {
+    local unique_slug="/test/arbitrary_$_$(date +%s)"
+
+    ./counter "${unique_slug}" 17 > "${OUTPUT_FILE}.set" 2>"${ERROR_FILE}.set"
+    local set_exit_code=$?
+    local set_output=$(cat "${OUTPUT_FILE}.set" 2>/dev/null | tr -d '\n\r')
+    assertEquals "CLI set exits 0" 0 "${set_exit_code}"
+    assertEquals "CLI set outputs nothing" "" "${set_output}"
+
+    ./counter "${unique_slug}" > "${OUTPUT_FILE}.read" 2>"${ERROR_FILE}.read"
+    local read_exit_code=$?
+    local read_output=$(cat "${OUTPUT_FILE}.read" 2>/dev/null | tr -d '\n\r')
+    assertEquals "CLI read exits 0" 0 ${read_exit_code}
+    assertEquals "CLI read outputs 17" "17" "${read_output}"
+
+    # Clean up extra files
+    rm -f "${OUTPUT_FILE}".set "${OUTPUT_FILE}".read "${ERROR_FILE}".set "${ERROR_FILE}".read
+}
+
 # Load shunit2
 . shunit2
