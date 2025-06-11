@@ -2,18 +2,12 @@
 #define KEYVALUE_H
 
 #include <time.h>
-
-#ifdef HAVE_GDBM
 #include <gdbm.h>
 #define DBM_FILE GDBM_FILE
 #define dbm_fetch gdbm_fetch
 #define dbm_store gdbm_store
 #define dbm_close gdbm_close
 #define DBM_REPLACE GDBM_REPLACE
-#else
-#include <ndbm.h>
-#define DBM_FILE DBM *
-#endif
 
 typedef struct {
     unsigned long count;

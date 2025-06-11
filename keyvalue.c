@@ -17,46 +17,17 @@ extern char *ap_pstrdup(const char *s);
 DBM_FILE do_dbm_open(char *pcntr_file, char *err)
 {
     DBM_FILE dbm;
-#ifdef HAVE_DB
-    if ((dbm = dbm_open(pcntr_file, O_RDWR | O_CREAT | O_EXLOCK, 0666))
-            == NULL) {
-        sprintf(err, "Failed to open counter dbmfile: %s", pcntr_file);
-    }
-#elif HAVE_GDBM
     if ((dbm = gdbm_open(pcntr_file, 512, GDBM_WRCREAT, 0666, 0)) == NULL) {
         sprintf(err, "Failed to open counter dbmfile: %s",
                 gdbm_strerror(gdbm_errno));
     }
-#else
-    if ((dbm = dbm_open(pcntr_file, O_RDWR | O_CREAT, 0666)) != NULL) {
-        sprintf(err, "Failed to open counter dbmfile: %s", pcntr_file);
-    }
-    else {
-        int lockerr;
-        struct flock lock = {F_WRLCK,0,0,0};
-        while ((lockerr = fcntl(dbm_dirfno(dbm), F_SETLKW, &lock)) < 0
-                && errno == EINTR) {
-            continue;
-        }
-        if (lockerr) {
-            dbm_close(dbm);
-            sprintf(err, "Failed to lock DBM counter file: %s ", pcntr_file);
-        }
-    }
-#endif
     return dbm;
 }
 
 void do_dbm_close(DBM_FILE dbm)
 {
-#if defined (HAVE_DB) || defined (HAVE_GDBM)
     /* unlocking is automatically taken care of */
     dbm_close(dbm);
-#else
-    struct flock unlock = {F_UNLCK, 0, 0, 0};
-    fcntl(dbm_dirfno(dbm), F_SETLKW, &unlock);
-    dbm_close(dbm);
-#endif				/* HAVE_DB || HAVE_GDBM */
 }
 
 /*
@@ -153,7 +124,6 @@ int cntr_lookup(cntr_config_rec * c,
     /*
      * No locking is necessary for read_only. so no do_dbm_open is done.
      */
-#ifdef HAVE_GDBM
     if ((dbm = gdbm_open(c->cntr_file, 512, GDBM_READER, 0444, 0)) == NULL) {
         fprintf(stderr, "Failed to open %s\n", c->cntr_file);
 #ifdef DEBUG_CGI
@@ -161,15 +131,6 @@ int cntr_lookup(cntr_config_rec * c,
 #endif
         return 0;
     }
-#else
-    if ((dbm = dbm_open(c->cntr_file, O_RDONLY, 0444)) == NULL) {
-        fprintf(stderr, "Failed to open %s\n", c->cntr_file);
-#ifdef DEBUG_CGI
-        fclose( dbg );
-#endif
-        return 0;
-    }
-#endif
     d = dbm_fetch(dbm, q);
 
     if (d.dptr) {		/* found */

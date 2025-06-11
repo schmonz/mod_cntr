@@ -1,8 +1,9 @@
 #ifndef IMAGE_H
 #define IMAGE_H
 
-#include "keyvalue.h"
 #include <gd.h>
+
+#include "keyvalue.h"
 
 #define MAXNDIGIT 12
 

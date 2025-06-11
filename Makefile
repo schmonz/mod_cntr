@@ -1,6 +1,6 @@
 CC=		cc
 CFLAGS=		-std=c99 -O2
-CPPFLAGS=	-I/opt/pkg/include -DHAVE_GDBM=1
+CPPFLAGS=	-I/opt/pkg/include
 LDFLAGS=	-L/opt/pkg/lib
 LIBS=		-lgdbm -lgd
 
