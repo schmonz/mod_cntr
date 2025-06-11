@@ -7,21 +7,42 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <time.h>
-#include <gdbm.h>
-
+#include <sqlite3.h>
 #include "keyvalue.h"
 
 extern char *ap_pstrdup(const char *s);
 
-/* DBM-specific handle structure */
+/* SQLite-specific handle structure */
 struct kvstore_handle {
-    GDBM_FILE dbm;
+    sqlite3 *db;
     kvstore_mode_t mode;
     char *path;
 };
 
-/* DBM implementation functions */
-static kvstore_handle_t* dbm_open(const char *path, kvstore_mode_t mode, kvstore_error_t *error)
+/* Initialize the database schema */
+static int sqlite_init_schema(sqlite3 *db)
+{
+    const char *create_table_sql = 
+        "CREATE TABLE IF NOT EXISTS kvstore ("
+        "key TEXT PRIMARY KEY, "
+        "value BLOB"
+        ");";
+    
+    char *err_msg = NULL;
+    int rc = sqlite3_exec(db, create_table_sql, NULL, NULL, &err_msg);
+    
+    if (rc != SQLITE_OK) {
+        if (err_msg) {
+            sqlite3_free(err_msg);
+        }
+        return -1;
+    }
+    
+    return 0;
+}
+
+/* SQLite implementation functions */
+static kvstore_handle_t* sqlite_open(const char *path, kvstore_mode_t mode, kvstore_error_t *error)
 {
     kvstore_handle_t *handle = calloc(1, sizeof(kvstore_handle_t));
     if (!handle) {
@@ -29,21 +50,17 @@ static kvstore_handle_t* dbm_open(const char *path, kvstore_mode_t mode, kvstore
         return NULL;
     }
 
-    int gdbm_mode;
-    int file_mode;
-
+    int sqlite_flags;
+    
     switch (mode) {
         case KVSTORE_MODE_READ_ONLY:
-            gdbm_mode = GDBM_READER;
-            file_mode = 0444;
+            sqlite_flags = SQLITE_OPEN_READONLY;
             break;
         case KVSTORE_MODE_READ_WRITE:
-            gdbm_mode = GDBM_WRITER;
-            file_mode = 0666;
+            sqlite_flags = SQLITE_OPEN_READWRITE;
             break;
         case KVSTORE_MODE_CREATE:
-            gdbm_mode = GDBM_WRCREAT;
-            file_mode = 0666;
+            sqlite_flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
             break;
         default:
             free(handle);
@@ -51,11 +68,21 @@ static kvstore_handle_t* dbm_open(const char *path, kvstore_mode_t mode, kvstore
             return NULL;
     }
 
-    handle->dbm = gdbm_open((char*)path, 512, gdbm_mode, file_mode, 0);
-    if (!handle->dbm) {
+    int rc = sqlite3_open_v2(path, &handle->db, sqlite_flags, NULL);
+    if (rc != SQLITE_OK) {
         free(handle);
         *error = KVSTORE_ERROR_OPEN;
         return NULL;
+    }
+
+    /* Initialize schema for create/write modes */
+    if (mode != KVSTORE_MODE_READ_ONLY) {
+        if (sqlite_init_schema(handle->db) != 0) {
+            sqlite3_close(handle->db);
+            free(handle);
+            *error = KVSTORE_ERROR_OPEN;
+            return NULL;
+        }
     }
 
     handle->mode = mode;
@@ -64,126 +91,172 @@ static kvstore_handle_t* dbm_open(const char *path, kvstore_mode_t mode, kvstore
     return handle;
 }
 
-static kvstore_error_t dbm_close(kvstore_handle_t *handle)
+static kvstore_error_t sqlite_close(kvstore_handle_t *handle)
 {
     if (!handle) {
         return KVSTORE_ERROR_INVALID_PARAM;
     }
 
-    if (handle->dbm) {
-        gdbm_close(handle->dbm);
+    if (handle->db) {
+        sqlite3_close(handle->db);
     }
-
+    
     if (handle->path) {
         free(handle->path);
     }
-
+    
     free(handle);
     return KVSTORE_OK;
 }
 
-static kvstore_error_t dbm_get(kvstore_handle_t *handle, const kvstore_key_t *key, kvstore_value_t *value)
+static kvstore_error_t sqlite_get(kvstore_handle_t *handle, const kvstore_key_t *key, kvstore_value_t *value)
 {
     if (!handle || !key || !value) {
         return KVSTORE_ERROR_INVALID_PARAM;
     }
 
-    datum dbm_key, dbm_data;
-    dbm_key.dptr = key->data;
-    dbm_key.dsize = key->size;
+    const char *sql = "SELECT value FROM kvstore WHERE key = ?";
+    sqlite3_stmt *stmt;
+    
+    int rc = sqlite3_prepare_v2(handle->db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        return KVSTORE_ERROR_READ;
+    }
 
-    dbm_data = gdbm_fetch(handle->dbm, dbm_key);
+    /* Bind the key as a blob to handle any binary data */
+    rc = sqlite3_bind_blob(stmt, 1, key->data, key->size, SQLITE_STATIC);
+    if (rc != SQLITE_OK) {
+        sqlite3_finalize(stmt);
+        return KVSTORE_ERROR_READ;
+    }
 
-    if (!dbm_data.dptr) {
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        /* Found the key, get the value */
+        const void *blob_data = sqlite3_column_blob(stmt, 0);
+        int blob_size = sqlite3_column_bytes(stmt, 0);
+        
+        value->data = malloc(blob_size);
+        if (!value->data) {
+            sqlite3_finalize(stmt);
+            return KVSTORE_ERROR_MEMORY;
+        }
+        
+        memcpy(value->data, blob_data, blob_size);
+        value->size = blob_size;
+        
+        sqlite3_finalize(stmt);
+        return KVSTORE_OK;
+    } else if (rc == SQLITE_DONE) {
+        /* Key not found */
+        sqlite3_finalize(stmt);
         return KVSTORE_ERROR_NOT_FOUND;
+    } else {
+        /* Error occurred */
+        sqlite3_finalize(stmt);
+        return KVSTORE_ERROR_READ;
     }
-
-    /* Allocate memory for the value and copy data */
-    value->data = malloc(dbm_data.dsize);
-    if (!value->data) {
-        free(dbm_data.dptr);
-        return KVSTORE_ERROR_MEMORY;
-    }
-
-    memcpy(value->data, dbm_data.dptr, dbm_data.dsize);
-    value->size = dbm_data.dsize;
-
-    free(dbm_data.dptr);
-    return KVSTORE_OK;
 }
 
-static kvstore_error_t dbm_put(kvstore_handle_t *handle, const kvstore_key_t *key, const kvstore_value_t *value)
+static kvstore_error_t sqlite_put(kvstore_handle_t *handle, const kvstore_key_t *key, const kvstore_value_t *value)
 {
     if (!handle || !key || !value) {
         return KVSTORE_ERROR_INVALID_PARAM;
     }
 
-    datum dbm_key, dbm_data;
-    dbm_key.dptr = key->data;
-    dbm_key.dsize = key->size;
-    dbm_data.dptr = value->data;
-    dbm_data.dsize = value->size;
+    const char *sql = "INSERT OR REPLACE INTO kvstore (key, value) VALUES (?, ?)";
+    sqlite3_stmt *stmt;
+    
+    int rc = sqlite3_prepare_v2(handle->db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        return KVSTORE_ERROR_WRITE;
+    }
 
-    int result = gdbm_store(handle->dbm, dbm_key, dbm_data, GDBM_REPLACE);
+    /* Bind key and value as blobs */
+    rc = sqlite3_bind_blob(stmt, 1, key->data, key->size, SQLITE_STATIC);
+    if (rc != SQLITE_OK) {
+        sqlite3_finalize(stmt);
+        return KVSTORE_ERROR_WRITE;
+    }
 
-    return (result == 0) ? KVSTORE_OK : KVSTORE_ERROR_WRITE;
+    rc = sqlite3_bind_blob(stmt, 2, value->data, value->size, SQLITE_STATIC);
+    if (rc != SQLITE_OK) {
+        sqlite3_finalize(stmt);
+        return KVSTORE_ERROR_WRITE;
+    }
+
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    return (rc == SQLITE_DONE) ? KVSTORE_OK : KVSTORE_ERROR_WRITE;
 }
 
-static kvstore_error_t dbm_delete(kvstore_handle_t *handle, const kvstore_key_t *key)
+static kvstore_error_t sqlite_delete(kvstore_handle_t *handle, const kvstore_key_t *key)
 {
     if (!handle || !key) {
         return KVSTORE_ERROR_INVALID_PARAM;
     }
 
-    datum dbm_key;
-    dbm_key.dptr = key->data;
-    dbm_key.dsize = key->size;
+    const char *sql = "DELETE FROM kvstore WHERE key = ?";
+    sqlite3_stmt *stmt;
+    
+    int rc = sqlite3_prepare_v2(handle->db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        return KVSTORE_ERROR_DELETE;
+    }
 
-    int result = gdbm_delete(handle->dbm, dbm_key);
+    rc = sqlite3_bind_blob(stmt, 1, key->data, key->size, SQLITE_STATIC);
+    if (rc != SQLITE_OK) {
+        sqlite3_finalize(stmt);
+        return KVSTORE_ERROR_DELETE;
+    }
 
-    return (result == 0) ? KVSTORE_OK : KVSTORE_ERROR_DELETE;
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    return (rc == SQLITE_DONE) ? KVSTORE_OK : KVSTORE_ERROR_DELETE;
 }
 
-static const char* dbm_error_string(kvstore_error_t error)
+static const char* sqlite_error_string(kvstore_error_t error)
 {
     switch (error) {
         case KVSTORE_OK:
             return "Success";
         case KVSTORE_ERROR_OPEN:
-            return "Failed to open key-value store";
+            return "Failed to open SQLite database";
         case KVSTORE_ERROR_CLOSE:
-            return "Failed to close key-value store";
+            return "Failed to close SQLite database";
         case KVSTORE_ERROR_READ:
-            return "Failed to read from key-value store";
+            return "Failed to read from SQLite database";
         case KVSTORE_ERROR_WRITE:
-            return "Failed to write to key-value store";
+            return "Failed to write to SQLite database";
         case KVSTORE_ERROR_DELETE:
-            return "Failed to delete from key-value store";
+            return "Failed to delete from SQLite database";
         case KVSTORE_ERROR_NOT_FOUND:
-            return "Key not found in key-value store";
+            return "Key not found in SQLite database";
         case KVSTORE_ERROR_MEMORY:
             return "Memory allocation error";
         case KVSTORE_ERROR_INVALID_PARAM:
             return "Invalid parameter";
         default:
-            return "Unknown error";
+            return "Unknown SQLite error";
     }
 }
 
-/* DBM interface instance */
-static kvstore_interface_t dbm_interface = {
-    .open = dbm_open,
-    .close = dbm_close,
-    .get = dbm_get,
-    .put = dbm_put,
-    .delete = dbm_delete,
-    .error_string = dbm_error_string
+/* SQLite interface instance */
+static kvstore_interface_t sqlite_interface = {
+    .open = sqlite_open,
+    .close = sqlite_close,
+    .get = sqlite_get,
+    .put = sqlite_put,
+    .delete = sqlite_delete,
+    .error_string = sqlite_error_string
 };
 
 /* Public API functions */
-kvstore_interface_t* kvstore_get_dbm_interface(void)
+kvstore_interface_t* kvstore_get_sqlite_interface(void)
 {
-    return &dbm_interface;
+    return &sqlite_interface;
 }
 
 kvstore_key_t kvstore_key_from_string(const char *str)
@@ -220,9 +293,9 @@ void kvstore_value_free(kvstore_value_t *value)
 /* High-level counter functions using the abstraction */
 char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
 {
-    kvstore_interface_t *kv = kvstore_get_dbm_interface();
+    kvstore_interface_t *kv = kvstore_get_sqlite_interface();
     kvstore_error_t error;
-
+    
     /* Normalize the URI stripping out double "//" */
     char *puri = ap_pstrdup(uri);
     char *ptr = puri;
@@ -260,7 +333,7 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
     /* Try to get existing value */
     kvstore_value_t value;
     error = kv->get(handle, &key, &value);
-
+    
     if (error == KVSTORE_OK) {
         /* Found existing record, increment counter */
         if (value.size == sizeof(cntr_results)) {
@@ -290,7 +363,7 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
         kvstore_value_t new_value;
         new_value.data = results;
         new_value.size = sizeof(cntr_results);
-
+        
         error = kv->put(handle, &key, &new_value);
         if (error != KVSTORE_OK) {
             char *err_msg = ap_pstrdup(kv->error_string(error));
@@ -309,7 +382,7 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
 
 int cntr_lookup(cntr_config_rec *c, const char *uri, cntr_results *counter)
 {
-    kvstore_interface_t *kv = kvstore_get_dbm_interface();
+    kvstore_interface_t *kv = kvstore_get_sqlite_interface();
     kvstore_error_t error;
     int result = 0;
 
@@ -341,7 +414,7 @@ int cntr_lookup(cntr_config_rec *c, const char *uri, cntr_results *counter)
     /* Try to get the value */
     kvstore_value_t value;
     error = kv->get(handle, &key, &value);
-
+    
     if (error == KVSTORE_OK && value.size == sizeof(cntr_results)) {
         memcpy(counter, value.data, sizeof(cntr_results));
         result = counter->count;
@@ -354,6 +427,6 @@ int cntr_lookup(cntr_config_rec *c, const char *uri, cntr_results *counter)
 #ifdef DEBUG_CGI
     fclose(dbg);
 #endif
-
+    
     return result;
 }

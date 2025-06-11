@@ -62,7 +62,7 @@ typedef struct {
 } cntr_config_rec;
 
 /* Public API functions */
-kvstore_interface_t* kvstore_get_dbm_interface(void);
+kvstore_interface_t* kvstore_get_sqlite_interface(void);
 kvstore_key_t kvstore_key_from_string(const char *str);
 void kvstore_key_free(kvstore_key_t *key);
 void kvstore_value_free(kvstore_value_t *value);

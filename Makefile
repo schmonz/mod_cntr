@@ -2,7 +2,7 @@ CC=		cc
 CFLAGS=		-std=c99 -O2
 CPPFLAGS=	-I/opt/pkg/include
 LDFLAGS=	-L/opt/pkg/lib
-LIBS=		-lgdbm -lgd
+LIBS=		-lsqlite3 -lgd
 
 .PHONY: test
 test: counter
