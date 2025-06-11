@@ -207,7 +207,15 @@ int main(int argc, char *argv[])
         }
 
         if (path_info && strlen(path_info)) {
-            cntr_inc(&counter, global_config, path_info); // XXX error checking
+            /* Use the abstracted counter increment function */
+            char *error_msg = cntr_inc(&counter, global_config, path_info);
+            if (error_msg) {
+                printf("Content-Type: text/plain\r\n\r\n");
+                printf("Error: %s\n", error_msg);
+                free(error_msg);
+                cleanup_config(global_config);
+                return 1;
+            }
             cntr_lookup(global_config, path_info, &counter);
         }
 
