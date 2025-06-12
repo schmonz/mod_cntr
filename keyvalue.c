@@ -296,6 +296,10 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
     
     /* Normalize the URI stripping out double "//" */
     char *puri = strdup(uri);
+    if (!puri) {
+      return strdup("Memory allocation error");
+    }
+
     char *ptr = puri;
     while (ptr && *ptr) {
         if (*ptr == '/' && *(ptr + 1) == '/') {
@@ -325,7 +329,7 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
     if (!key.data) {
         kv->close(handle);
         free(puri);
-        return strdup("Memory allocation error");
+        return strdup("Memory allocation error creating key");
     }
 
     /* Try to get existing value */
@@ -436,6 +440,10 @@ char *cntr_set(cntr_results *results, cntr_config_rec *c, const char *uri, unsig
 
     /* Normalize the URI stripping out double "//" */
     char *puri = strdup(uri);
+    if (!puri) {
+      return strdup("Memory allocation error");
+    }
+
     char *ptr = puri;
     while (ptr && *ptr) {
         if (*ptr == '/' && *(ptr + 1) == '/') {
@@ -465,7 +473,7 @@ char *cntr_set(cntr_results *results, cntr_config_rec *c, const char *uri, unsig
     if (!key.data) {
         kv->close(handle);
         free(puri);
-        return strdup("Memory allocation error");
+        return strdup("Memory allocation error creating key");
     }
 
     /* Store the new record */

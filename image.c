@@ -490,6 +490,11 @@ int cntr_parse_query(
 
     do {
         if (strncasecmp(q, "face=", 5) == 0) {
+            if (*face) {
+                free(*face);
+                *face = NULL;
+            }
+
             *face = strdup(q + 5);
 
             /******************************************
@@ -559,7 +564,7 @@ int cntr_draw_digit(cntr_config_rec * c, int count)
     int i;
     int width = 0;
     int height = 0;
-    char digitbuf[256], digitfmt[16], *dp;
+    char digitbuf[256], *dp;
     cntr_image_t* imdigit[10] = {NULL};
     cntr_image_t* imgd = NULL;
     void *png_data;
@@ -576,13 +581,11 @@ int cntr_draw_digit(cntr_config_rec * c, int count)
     }
 
     if (ndigit > 0) {
-        sprintf(digitfmt, "%s%dd", "%0",
-                (ndigit <= MAXNDIGIT ? ndigit : MAXNDIGIT));
+        sprintf(digitbuf, "%0*d", (ndigit <= MAXNDIGIT ? ndigit : MAXNDIGIT), (fcount ? fcount : count));
     }
     else {
-        strcpy(digitfmt, "%d");
+        sprintf(digitbuf, "%d", (fcount ? fcount : count));
     }
-    sprintf(digitbuf, digitfmt, (fcount ? fcount : count));
 
     /*
      * Load required digits Calculate size of output imgd too
@@ -613,7 +616,7 @@ int cntr_draw_digit(cntr_config_rec * c, int count)
 
     /* Load digit images and calculate dimensions */
     for (dp = digitbuf; dp && *dp; dp++) {
-        if (isdigit(*dp)) {
+        if (isdigit((int)*dp)) {
             i = *dp - '0';
             if (imdigit[i] == NULL) {
                 if ((imdigit[i] = cntr_read_digit(i)) == NULL) {
@@ -634,7 +637,7 @@ int cntr_draw_digit(cntr_config_rec * c, int count)
     /* Draw digits */
     width = 0;
     for (dp = digitbuf; dp && *dp; dp++) {
-        if (isdigit(*dp)) {
+        if (isdigit((int)*dp)) {
             i = *dp - '0';
             cntr_image_copy_resized(imgd, imdigit[i], width, 0, 0, 0,
                                    cntr_image_get_width(imdigit[i]), height,

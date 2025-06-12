@@ -231,7 +231,6 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    char *request_method = getenv("REQUEST_METHOD");
     char *path_info = getenv("PATH_INFO");
 
     /* Seed random number generator */
