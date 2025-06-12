@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <errno.h>
 #include <ctype.h>
@@ -108,7 +109,10 @@ static cntr_image_t* png_load_from_file(const char* filename)
     }
 
     // Check if it's a PNG file
-    fread(header, 1, 8, fp);
+    size_t ret = fread(header, 1, 8, fp);
+    if (ret != 8) {
+        fprintf(stderr, "fread() failed: %zu\n", ret);
+    }
     if (png_sig_cmp(header, 0, 8)) {
         fprintf(stderr, "%s: Not a PNG file\n", filename);
         fclose(fp);

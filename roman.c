@@ -8,7 +8,7 @@
  *******************************************************************/
 const char *roman( unsigned n )
 {
-    static char* rom[3][10] = {
+    static const char* rom[3][10] = {
         {"","C","CC","CCC","CD","D","DC","DCC","DCCC","CM"},
         {"","X","XX","XXX","XL","L","LX","LXX","LXXX","XC"},
         {"","I","II","III","IV","V","VI","VII","VIII","IX"}
