@@ -117,7 +117,7 @@ int cntr_debug_handler(cntr_config_rec *c)
     if (path_info && strlen(path_info)) {
         printf("<b>count(path_info)</b>\n");
         cntr_lookup(c, path_info, &counter);
-        printf(" count = %ld\n date = %ld\n", counter.count, counter.date);
+        printf(" count = %ld\n date = %ld\n", (long)counter.count, counter.date);
     }
 
     printf("</pre>\n");
@@ -155,7 +155,7 @@ int handle_cli_lookup(cntr_config_rec *config, const char *key)
     cntr_lookup(config, key, &counter);
 
     /* Print the stored value (count) */
-    printf("%ld\n", counter.count);
+    printf("%ld\n", (long)counter.count);
     return 0;
 }
 
