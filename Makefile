@@ -7,7 +7,7 @@ test: counter
 	./test_counter.sh
 
 counter: counter.o roman.o image.o keyvalue.o
-	${CC} -o $@ ${LDFLAGS} counter.o roman.o image.o keyvalue.o
+	${CC} -o $@ counter.o roman.o image.o keyvalue.o ${LDFLAGS}
 
 .c.o:
 	${CC} -c $< ${CFLAGS} ${CPPFLAGS}
