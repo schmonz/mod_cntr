@@ -193,6 +193,47 @@ int handle_cli_set(cntr_config_rec *config, const char *key, const char *value_s
     return 0;
 }
 
+/*
+ * Process a single web request (CGI mode)
+ */
+int process_web_request(cntr_config_rec *config)
+{
+    char *path_info = getenv("PATH_INFO");
+
+    /* Check if this is a debug request */
+    if (path_info && strstr(path_info, "debug")) {
+        cntr_debug_handler(config);
+    }
+    else {
+        /* Handle counter display */
+        cntr_results counter;
+        counter.count = 0;
+        counter.date = 0;
+
+        if (!config->cntr_file || !*config->cntr_file) {
+            printf("Content-Type: text/plain\r\n\r\n");
+            printf("Error: No counter file configured\n");
+            return 1;
+        }
+
+        if (path_info && strlen(path_info)) {
+            /* Use the abstracted counter increment function */
+            char *error_msg = cntr_inc(&counter, config, path_info);
+            if (error_msg) {
+                printf("Content-Type: text/plain\r\n\r\n");
+                printf("Error: %s\n", error_msg);
+                free(error_msg);
+                return 1;
+            }
+            cntr_lookup(config, path_info, &counter);
+        }
+
+        cntr_draw_digit(config, counter.count);
+    }
+
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     global_config = init_config();
@@ -232,47 +273,13 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    char *path_info = getenv("PATH_INFO");
-
     /* Seed random number generator */
     srand(time(NULL));
 
-    /* Check if this is a debug request */
-    if (path_info && strstr(path_info, "debug")) {
-        cntr_debug_handler(global_config);
-    }
-    else {
-        /* Handle counter display */
-        cntr_results counter;
-        counter.count = 0;
-        counter.date = 0;
-
-        if (!global_config->cntr_file || !*global_config->cntr_file) {
-            printf("Content-Type: text/plain\r\n\r\n");
-            printf("Error: No counter file configured\n");
-            cleanup_config(global_config);
-            cntr_image_cleanup();
-            return 1;
-        }
-
-        if (path_info && strlen(path_info)) {
-            /* Use the abstracted counter increment function */
-            char *error_msg = cntr_inc(&counter, global_config, path_info);
-            if (error_msg) {
-                printf("Content-Type: text/plain\r\n\r\n");
-                printf("Error: %s\n", error_msg);
-                free(error_msg);
-                cleanup_config(global_config);
-                cntr_image_cleanup();
-                return 1;
-            }
-            cntr_lookup(global_config, path_info, &counter);
-        }
-
-        cntr_draw_digit(global_config, counter.count);
-    }
+    /* Process the web request */
+    int result = process_web_request(global_config);
 
     cleanup_config(global_config);
     cntr_image_cleanup();
-    return 0;
+    return result;
 }
