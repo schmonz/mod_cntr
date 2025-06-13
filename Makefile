@@ -1,19 +1,13 @@
-CC=		cc
-CFLAGS=		-std=c99 -O2 # -Wall -Wextra -Wunused-variable -Wwrite-strings -Wformat=2 -Wformat-security -Wstack-protector -fstack-protector-strong -D_FORTIFY_SOURCE=2 # -fsanitize=address -g
-CPPFLAGS!=	pkg-config --cflags sqlite3 libpng
-CPPFLAGS+=	-D_XOPEN_SOURCE=600
-LDFLAGS!=	pkg-config --libs sqlite3 libpng
+all: builddir.sh CMakeLists.txt *.c *.h
+	build_dir=$$(./builddir.sh); \
+	mkdir -p $$build_dir && cd $$build_dir && cmake .. && ${MAKE}
 
-test: counter
-	./test_counter.sh
+test: builddir.sh all
+	build_dir=$$(./builddir.sh); \
+	cd $$build_dir && ctest --verbose
 
-counter: counter.o roman.o image.o keyvalue.o
-	${CC} -o $@ counter.o roman.o image.o keyvalue.o ${LDFLAGS}
+clean: builddir.sh
+	build_dir=$$(./builddir.sh); \
+	rm -rf $$build_dir
 
-.c.o:
-	${CC} -c $< ${CFLAGS} ${CPPFLAGS}
-
-clean:
-	rm -f counter *.o *.db
-
-.PHONY: test clean
+.PHONY: all test clean
