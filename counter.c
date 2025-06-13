@@ -79,6 +79,30 @@ void cleanup_config(cntr_config_rec *conf)
     }
 }
 
+/*
+ * One-time initialization for the application
+ */
+int init_application()
+{
+    /* Initialize image system before using any image functions */
+    if (cntr_image_system_init() != 0) {
+        return 1;
+    }
+
+    /* Seed random number generator */
+    srand(time(NULL));
+
+    return 0;
+}
+
+/*
+ * One-time cleanup for the application
+ */
+void cleanup_application()
+{
+    cntr_image_cleanup();
+}
+
 int cntr_debug_handler(cntr_config_rec *c)
 {
     char *path_info = getenv("PATH_INFO");
@@ -202,7 +226,7 @@ int process_web_request(cntr_config_rec *config)
 
     /* Check if this is a debug request */
     if (path_info && strstr(path_info, "debug")) {
-        cntr_debug_handler(config);
+        return cntr_debug_handler(config);
     }
     else {
         /* Handle counter display */
@@ -264,22 +288,17 @@ int main(int argc, char *argv[])
         return result;
     }
 
-    /* CGI mode: original functionality */
-
-    /* Initialize image system before using any image functions */
-    if (cntr_image_system_init() != 0) {
-        fprintf(stderr, "Failed to initialize image system\n");
+    /* CGI mode: initialize application */
+    if (init_application() != 0) {
+        fprintf(stderr, "Failed to initialize application\n");
         cleanup_config(global_config);
         return 1;
     }
 
-    /* Seed random number generator */
-    srand(time(NULL));
-
     /* Process the web request */
     int result = process_web_request(global_config);
 
+    cleanup_application();
     cleanup_config(global_config);
-    cntr_image_cleanup();
     return result;
 }
