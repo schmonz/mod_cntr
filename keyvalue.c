@@ -288,16 +288,12 @@ void kvstore_value_free(kvstore_value_t *value)
     }
 }
 
-/* High-level counter functions using the abstraction */
-char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
+/* Helper function to normalize URI by removing double slashes */
+static char* normalize_uri(const char *uri)
 {
-    kvstore_interface_t *kv = kvstore_get_sqlite_interface();
-    kvstore_error_t error;
-    
-    /* Normalize the URI stripping out double "//" */
     char *puri = strdup(uri);
     if (!puri) {
-      return strdup("Memory allocation error");
+        return NULL;
     }
 
     char *ptr = puri;
@@ -311,30 +307,74 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
             ptr++;
         }
     }
+    return puri;
+}
 
-    /* Initialize results */
-    results->count = 0;
-    results->date = 0;
+/* Helper function to handle common kvstore operations setup */
+static char* kvstore_setup(cntr_config_rec *c, const char *uri, 
+                          kvstore_interface_t **kv_out, 
+                          kvstore_handle_t **handle_out, 
+                          kvstore_key_t *key_out, 
+                          char **puri_out)
+{
+    *kv_out = kvstore_get_sqlite_interface();
+    kvstore_error_t error;
+    
+    /* Normalize the URI */
+    *puri_out = normalize_uri(uri);
+    if (!*puri_out) {
+        return strdup("Memory allocation error");
+    }
 
     /* Open the key-value store */
-    kvstore_handle_t *handle = kv->open(c->cntr_file, KVSTORE_MODE_CREATE, &error);
-    if (!handle) {
-        char *err_msg = strdup(kv->error_string(error));
-        free(puri);
+    *handle_out = (*kv_out)->open(c->cntr_file, KVSTORE_MODE_CREATE, &error);
+    if (!*handle_out) {
+        char *err_msg = strdup((*kv_out)->error_string(error));
+        free(*puri_out);
         return err_msg;
     }
 
     /* Create key from URI */
-    kvstore_key_t key = kvstore_key_from_string(puri);
-    if (!key.data) {
-        kv->close(handle);
-        free(puri);
+    *key_out = kvstore_key_from_string(*puri_out);
+    if (!key_out->data) {
+        (*kv_out)->close(*handle_out);
+        free(*puri_out);
         return strdup("Memory allocation error creating key");
+    }
+
+    return NULL; /* Success */
+}
+
+/* Helper function to clean up kvstore resources */
+static void kvstore_cleanup(kvstore_interface_t *kv, kvstore_handle_t *handle, 
+                           kvstore_key_t *key, char *puri)
+{
+    kvstore_key_free(key);
+    kv->close(handle);
+    free(puri);
+}
+
+/* High-level counter functions using the abstraction */
+char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
+{
+    kvstore_interface_t *kv;
+    kvstore_handle_t *handle;
+    kvstore_key_t key;
+    char *puri;
+    
+    /* Initialize results */
+    results->count = 0;
+    results->date = 0;
+
+    /* Setup kvstore resources */
+    char *setup_error = kvstore_setup(c, uri, &kv, &handle, &key, &puri);
+    if (setup_error) {
+        return setup_error;
     }
 
     /* Try to get existing value */
     kvstore_value_t value;
-    error = kv->get(handle, &key, &value);
+    kvstore_error_t error = kv->get(handle, &key, &value);
     
     if (error == KVSTORE_OK) {
         /* Found existing record, increment counter */
@@ -354,9 +394,7 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
     } else {
         /* Error occurred */
         char *err_msg = strdup(kv->error_string(error));
-        kvstore_key_free(&key);
-        kv->close(handle);
-        free(puri);
+        kvstore_cleanup(kv, handle, &key, puri);
         return err_msg;
     }
 
@@ -369,16 +407,12 @@ char *cntr_inc(cntr_results *results, cntr_config_rec *c, const char *uri)
         error = kv->put(handle, &key, &new_value);
         if (error != KVSTORE_OK) {
             char *err_msg = strdup(kv->error_string(error));
-            kvstore_key_free(&key);
-            kv->close(handle);
-            free(puri);
+            kvstore_cleanup(kv, handle, &key, puri);
             return err_msg;
         }
     }
 
-    kvstore_key_free(&key);
-    kv->close(handle);
-    free(puri);
+    kvstore_cleanup(kv, handle, &key, puri);
     return NULL;  /* Success */
 }
 
@@ -435,45 +469,19 @@ int cntr_lookup(cntr_config_rec *c, const char *uri, cntr_results *counter)
 
 char *cntr_set(cntr_results *results, cntr_config_rec *c, const char *uri, unsigned long count)
 {
-    kvstore_interface_t *kv = kvstore_get_sqlite_interface();
-    kvstore_error_t error;
-
-    /* Normalize the URI stripping out double "//" */
-    char *puri = strdup(uri);
-    if (!puri) {
-      return strdup("Memory allocation error");
-    }
-
-    char *ptr = puri;
-    while (ptr && *ptr) {
-        if (*ptr == '/' && *(ptr + 1) == '/') {
-            char *q = ptr + 1;
-            while ((*q = *(q + 1)))
-                q++;
-        }
-        else {
-            ptr++;
-        }
-    }
+    kvstore_interface_t *kv;
+    kvstore_handle_t *handle;
+    kvstore_key_t key;
+    char *puri;
 
     /* Initialize results with the provided count */
     results->count = count;
     results->date = time(0L);
 
-    /* Open the key-value store */
-    kvstore_handle_t *handle = kv->open(c->cntr_file, KVSTORE_MODE_CREATE, &error);
-    if (!handle) {
-        char *err_msg = strdup(kv->error_string(error));
-        free(puri);
-        return err_msg;
-    }
-
-    /* Create key from URI */
-    kvstore_key_t key = kvstore_key_from_string(puri);
-    if (!key.data) {
-        kv->close(handle);
-        free(puri);
-        return strdup("Memory allocation error creating key");
+    /* Setup kvstore resources */
+    char *setup_error = kvstore_setup(c, uri, &kv, &handle, &key, &puri);
+    if (setup_error) {
+        return setup_error;
     }
 
     /* Store the new record */
@@ -481,17 +489,13 @@ char *cntr_set(cntr_results *results, cntr_config_rec *c, const char *uri, unsig
     new_value.data = results;
     new_value.size = sizeof(cntr_results);
 
-    error = kv->put(handle, &key, &new_value);
+    kvstore_error_t error = kv->put(handle, &key, &new_value);
     if (error != KVSTORE_OK) {
         char *err_msg = strdup(kv->error_string(error));
-        kvstore_key_free(&key);
-        kv->close(handle);
-        free(puri);
+        kvstore_cleanup(kv, handle, &key, puri);
         return err_msg;
     }
 
-    kvstore_key_free(&key);
-    kv->close(handle);
-    free(puri);
+    kvstore_cleanup(kv, handle, &key, puri);
     return NULL;  /* Success */
 }
