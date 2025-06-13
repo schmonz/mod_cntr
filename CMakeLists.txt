@@ -27,6 +27,13 @@ else()
     message(STATUS "scan-build not found. clang-analyzer target will not be available.")
 endif()
 
+find_program(CLANG_TIDY clang-tidy)
+if(CLANG_TIDY)
+    message(STATUS "clang-tidy found: ${CLANG_TIDY}")
+else()
+    message(STATUS "clang-tidy not found. clang-tidy target will not be available.")
+endif()
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 pkg_check_modules(LIBPNG REQUIRED IMPORTED_TARGET libpng)
@@ -78,5 +85,18 @@ if(SCAN_BUILD)
         COMMAND ${SCAN_BUILD} -o ${CMAKE_BINARY_DIR}/scan-build-results ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target counter
         COMMENT "Running clang analyzer"
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+endif()
+
+if(CLANG_TIDY)
+    add_custom_target(static-analysis-clang-tidy
+        COMMAND ${CMAKE_COMMAND} -E echo "Running clang-tidy..."
+        COMMAND ${CLANG_TIDY}
+            -p=${CMAKE_BINARY_DIR}
+            -checks=bugprone-*,cert-*,clang-analyzer-*,cppcoreguidelines-*,misc-*,modernize-*,performance-*,portability-*,readability-*,-cert-err34-c,-modernize-macro-to-enum,-readability-function-cognitive-complexity
+            ${SOURCES}
+        DEPENDS counter
+        COMMENT "Running clang-tidy"
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
 endif()
