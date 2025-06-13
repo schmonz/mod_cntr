@@ -113,6 +113,8 @@ static cntr_image_t* png_load_from_file(const char* filename)
     size_t ret = fread(header, 1, 8, fp);
     if (ret != 8) {
         fprintf(stderr, "fread() failed: %zu\n", ret);
+        fclose(fp);
+        return NULL;
     }
     if (png_sig_cmp(header, 0, 8)) {
         fprintf(stderr, "%s: Not a PNG file\n", filename);
@@ -513,7 +515,11 @@ int cntr_parse_query(
                     unsigned int seed;
                     FILE *urandom = fopen("/dev/urandom", "r");
                     if (urandom) {
-                        fread(&seed, sizeof(seed), 1, urandom);
+                        size_t bytes_read = fread(&seed, sizeof(seed), 1, urandom);
+                        if (bytes_read != 1) {
+                            // If reading fails, fall back to time-based seed
+                            seed = (unsigned int)time(NULL) ^ (unsigned int)getpid();
+                        }
                         fclose(urandom);
                     } else {
                         /* Fallback to a mix of time and process ID if /dev/urandom isn't available */
