@@ -38,6 +38,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 pkg_check_modules(LIBPNG REQUIRED IMPORTED_TARGET libpng)
 pkg_check_modules(FASTCGI REQUIRED IMPORTED_TARGET fcgi)
+pkg_check_modules(CHECK IMPORTED_TARGET check)
 
 set(SOURCES
     counter.c
@@ -47,8 +48,17 @@ set(SOURCES
 )
 
 add_executable(counter ${SOURCES})
-
 target_link_libraries(counter PRIVATE PkgConfig::SQLITE3 PkgConfig::LIBPNG PkgConfig::FASTCGI)
+
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
+if(CHECK_FOUND)
+    message(STATUS "Check unit testing framework found")
+    add_executable(check_roman tests/check_roman.c roman.c)
+    target_link_libraries(check_roman PRIVATE PkgConfig::CHECK)
+    add_test(NAME check_roman COMMAND check_roman)
+else()
+    message(WARNING "Check unit testing framework not found - unit tests will not be built")
+endif()
 
 enable_testing()
 
