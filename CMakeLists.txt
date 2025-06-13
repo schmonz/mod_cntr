@@ -2,10 +2,16 @@ cmake_minimum_required(VERSION 3.10)
 project(counter C)
 
 set(CMAKE_C_STANDARD 99)
+add_compile_options(-D_XOPEN_SOURCE=600) # -Wall -Wextra -Werror -Wunused-variable -Wwrite-strings -Wformat=2 -Wformat-security -Wstack-protector -fstack-protector-strong -D_FORTIFY_SOURCE=2)
 
-add_compile_options(-O2 -D_XOPEN_SOURCE=600)
-
-# add_compile_options(-Wall -Wextra -Wunused-variable -Wwrite-strings -Wformat=2 -Wformat-security -Wstack-protector -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fsanitize=address -g)
+option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
+if(ENABLE_ASAN)
+    add_compile_options(-fsanitize=address -g -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address)
+    add_compile_options(-O1)  # Better debugging with ASan
+else()
+    add_compile_options(-O2)
+endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
