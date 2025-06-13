@@ -19,20 +19,22 @@ const char *roman( unsigned n )
     int rest  = n % 1000;
 
     static char ret[1024];
-    char *q;
+    ret[0] = '\0';  /* Initialize buffer to empty string */
+    char *q = ret;
 
-    for( q=ret; mille--; )
+    for( int i = 0; i < mille && q < ret + sizeof(ret) - 1; i++ )
     {
         *q++ = 'M';
     }
+    *q = '\0';  /* Properly null-terminate */
     mille = rest / 100;
     rest %= 100;
-    strcat( ret, rom[0][mille] );
+    strncat( ret, rom[0][mille], sizeof(ret) - strlen(ret) - 1 );
 
     mille = rest / 10;
     rest %= 10;
-    strcat( ret, rom[1][mille] );
-    strcat( ret, rom[2][rest] );
+    strncat( ret, rom[1][mille], sizeof(ret) - strlen(ret) - 1 );
+    strncat( ret, rom[2][rest], sizeof(ret) - strlen(ret) - 1 );
 
     return ret;
 }
