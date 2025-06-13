@@ -3,8 +3,6 @@
 
 #include "keyvalue.h"
 
-#include <png.h>
-
 #define MAXNDIGIT 12
 
 /* Forward declarations */

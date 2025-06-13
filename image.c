@@ -7,6 +7,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <png.h>
+
 #include "image.h"
 
 extern cntr_config_rec *global_config;

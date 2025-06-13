@@ -3,11 +3,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <time.h>
 #include <sqlite3.h>
+
 #include "keyvalue.h"
 
 /* SQLite-specific handle structure */

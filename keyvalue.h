@@ -1,7 +1,6 @@
 #ifndef KEYVALUE_H
 #define KEYVALUE_H
 
-#include <stddef.h>
 #include <time.h>
 
 /* Forward declaration for opaque handle */
