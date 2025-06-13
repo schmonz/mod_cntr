@@ -20,11 +20,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <ctype.h>
-#include <dirent.h>
-#include <time.h>
+#include <signal.h>
 
 #include "keyvalue.h"
 #include "image.h"
@@ -43,6 +39,17 @@
  * Create config data structure
  */
 cntr_config_rec *global_config = NULL;
+static volatile sig_atomic_t shutdown_requested = 0;
+
+/*
+ * Signal handler for graceful shutdown
+ */
+static void signal_handler(int sig)
+{
+    if (sig == SIGTERM || sig == SIGINT) {
+        shutdown_requested = 1;
+    }
+}
 
 /*
  * Initialize configuration from environment variables
@@ -218,7 +225,7 @@ int handle_cli_set(cntr_config_rec *config, const char *key, const char *value_s
 }
 
 /*
- * Process a single web request (CGI mode)
+ * Process a single web request (FastCGI mode)
  */
 int process_web_request(cntr_config_rec *config)
 {
@@ -278,7 +285,7 @@ int main(int argc, char *argv[])
         } else {
             /* Too many arguments */
             fprintf(stderr, "Usage: %s [key] [value]\n", argv[0]);
-            fprintf(stderr, "  No args: Run as CGI\n");
+            fprintf(stderr, "  No args: Run as FastCGI\n");
             fprintf(stderr, "  One arg: Lookup key value\n");
             fprintf(stderr, "  Two args: Set key to value\n");
             cleanup_config(global_config);
@@ -288,7 +295,12 @@ int main(int argc, char *argv[])
         return result;
     }
 
-    /* CGI mode: initialize application */
+#include <fcgi_stdio.h>
+
+    /* FastCGI mode: Initialize signal handlers */
+    signal(SIGTERM, signal_handler);
+    signal(SIGINT, signal_handler);
+
     if (init_application() != 0) {
         fprintf(stderr, "Failed to initialize application\n");
         cleanup_config(global_config);
@@ -296,9 +308,15 @@ int main(int argc, char *argv[])
     }
 
     /* Process the web request */
-    int result = process_web_request(global_config);
+    int request_count = 0;
+    while (FCGI_Accept() >= 0 && !shutdown_requested) {
+        request_count++;
+        shutdown_requested = process_web_request(global_config);
+    }
 
     cleanup_application();
     cleanup_config(global_config);
-    return result;
+    
+    fprintf(stderr, "FastCGI process shutting down after %d requests\n", request_count);
+    return shutdown_requested;
 }

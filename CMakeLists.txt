@@ -10,6 +10,7 @@ add_compile_options(-O2 -D_XOPEN_SOURCE=600)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 pkg_check_modules(LIBPNG REQUIRED IMPORTED_TARGET libpng)
+pkg_check_modules(FASTCGI REQUIRED IMPORTED_TARGET fcgi)
 
 set(SOURCES
     counter.c
@@ -20,7 +21,7 @@ set(SOURCES
 
 add_executable(counter ${SOURCES})
 
-target_link_libraries(counter PRIVATE PkgConfig::SQLITE3 PkgConfig::LIBPNG)
+target_link_libraries(counter PRIVATE PkgConfig::SQLITE3 PkgConfig::LIBPNG PkgConfig::FASTCGI)
 
 enable_testing()
 
