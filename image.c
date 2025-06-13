@@ -507,6 +507,21 @@ int cntr_parse_query(
              *                                        *
              ******************************************/
             if( !strcasecmp(*face, "random") ) {
+                static int rand_initialized = 0;
+                if (!rand_initialized) {
+                    unsigned int seed;
+                    FILE *urandom = fopen("/dev/urandom", "r");
+                    if (urandom) {
+                        fread(&seed, sizeof(seed), 1, urandom);
+                        fclose(urandom);
+                    } else {
+                        /* Fallback to a mix of time and process ID if /dev/urandom isn't available */
+                        seed = (unsigned int)time(NULL) ^ (unsigned int)getpid();
+                    }
+                    srand(seed);
+                    rand_initialized = 1;
+                }
+
                 DIR *facedir = opendir( global_config->cntr_facedir );
                 if( facedir ) {
                     struct dirent *direntry;

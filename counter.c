@@ -91,13 +91,9 @@ void cleanup_config(cntr_config_rec *conf)
  */
 int init_application()
 {
-    /* Initialize image system before using any image functions */
     if (cntr_image_system_init() != 0) {
         return 1;
     }
-
-    /* Seed random number generator */
-    srand(time(NULL));
 
     return 0;
 }
