@@ -13,6 +13,20 @@ else()
     add_compile_options(-O2)
 endif()
 
+find_program(CPPCHECK cppcheck)
+if(CPPCHECK)
+    message(STATUS "cppcheck found: ${CPPCHECK}")
+else()
+    message(STATUS "cppcheck not found. cppcheck target will not be available.")
+endif()
+
+find_program(SCAN_BUILD scan-build)
+if(SCAN_BUILD)
+    message(STATUS "scan-build found: ${SCAN_BUILD}")
+else()
+    message(STATUS "scan-build not found. clang-analyzer target will not be available.")
+endif()
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 pkg_check_modules(LIBPNG REQUIRED IMPORTED_TARGET libpng)
@@ -38,3 +52,31 @@ add_test(
 )
 
 set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "*.db")
+
+if(CPPCHECK)
+    add_custom_target(static-analysis-cppcheck
+        COMMAND ${CPPCHECK}
+            --enable=all
+            --std=c99
+            --inconclusive
+            --suppress=missingIncludeSystem
+            --suppress=unmatchedSuppression
+            --suppress=unusedFunction
+            --error-exitcode=1
+            -I ${CMAKE_SOURCE_DIR}
+            ${SOURCES}
+        COMMENT "Running cppcheck"
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+endif()
+
+if(SCAN_BUILD)
+    add_custom_target(static-analysis-clang
+        COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/scan-build-results
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/scan-build-results
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target clean
+        COMMAND ${SCAN_BUILD} -o ${CMAKE_BINARY_DIR}/scan-build-results ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target counter
+        COMMENT "Running clang analyzer"
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+endif()
