@@ -71,7 +71,7 @@ static void getword(char *word, char *line, char stop)
     while ((line[y++] = line[x++]));
 }
 
-static int getline(char *s, int n, FILE *f)
+static int get_line(char *s, int n, FILE *f)
 {
     register int i = 0;
 
@@ -158,7 +158,7 @@ static void copy_file(FILE *target, FILE *source)
 {
     static char line[MAX_STRING_LEN];
 
-    while (!(getline(line, MAX_STRING_LEN, source))) {  
+    while (!(get_line(line, MAX_STRING_LEN, source))) {  
 	putline(target, line);
     }
 }
@@ -216,7 +216,7 @@ int main(int argc, char *argv[])
     ap_cpystrn(realm, argv[2], sizeof(realm));
 
     found = 0;
-    while (!(getline(line, MAX_STRING_LEN, f))) {
+    while (!(get_line(line, MAX_STRING_LEN, f))) {
 	if (found || (line[0] == '#') || (!line[0])) {
 	    putline(tfp, line);
 	    continue;

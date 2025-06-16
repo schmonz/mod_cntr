@@ -448,7 +448,7 @@ case "$PLAT" in
     *-netbsd*)
 	OS='NetBSD'
 	CFLAGS="$CFLAGS -DNETBSD"
-	LIBS="$LIBS -lcrypt"
+	LIBS="$LIBS -lm -lcrypt"
 	DBM_LIB=""
 	DB_LIB=""
 	DEF_WANTHSREGEX=no

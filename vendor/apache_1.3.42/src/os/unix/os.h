@@ -29,7 +29,7 @@
  * and prototypes of OS specific functions defined in os.c or os-inline.c
  */
 
-#if !defined(INLINE) && defined(USE_GNU_INLINE)
+#if 0 && !defined(INLINE) && defined(USE_GNU_INLINE)
 /* Compiler supports inline, so include the inlineable functions as
  * part of the header
  */
